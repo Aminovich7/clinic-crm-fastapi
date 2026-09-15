@@ -10,6 +10,7 @@ services:
       - .env
     depends_on:
       - db
+      - redis
 
   db:
     image: postgres:18-alpine
@@ -19,9 +20,15 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
     volumes:
-      - pgdata:/var/lib/postgresql
+      - pgdata:/var/lib/postgresql/data
     ports:
       - "5432:5432"
+
+  redis:
+    image:  redis:7-alpine
+    container_name: clinic-crm-redis
+    ports:
+      - "6379:6379"
 
 volumes:
   pgdata:
