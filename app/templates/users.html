@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% block title %}Foydalanuvchilar — Klinika CRM{% endblock %}
+{% block content %}
+<h1>Foydalanuvchilar</h1>
+
+<div id="error-container"></div>
+<div id="success-container"></div>
+
+<!-- Managers — superadmin only -->
+<div id="managers-section" class="hidden">
+  <h2>Menejerlar</h2>
+
+  <div class="card hidden" id="manager-form-card">
+    <h2 id="manager-form-title">Menejer qo'shish</h2>
+    <form class="inline-form" id="manager-form">
+      <input type="hidden" id="manager-id">
+      <div class="field">
+        <label for="manager-username">Foydalanuvchi nomi</label>
+        <input type="text" id="manager-username" minlength="3" maxlength="64" required>
+      </div>
+      <div class="field">
+        <label for="manager-full-name">To'liq ism</label>
+        <input type="text" id="manager-full-name" minlength="3" maxlength="64" required>
+      </div>
+      <div class="field">
+        <label for="manager-password">Parol</label>
+        <input type="password" id="manager-password" minlength="8" required>
+      </div>
+      <button type="submit">Saqlash</button>
+      <button type="button" class="secondary" id="manager-cancel-btn">Bekor qilish</button>
+    </form>
+    <p class="muted" id="manager-password-note"></p>
+  </div>
+
+  <button id="manager-add-btn">+ Menejer qo'shish</button>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Foydalanuvchi nomi</th>
+          <th>To'liq ism</th>
+          <th>Holati</th>
+          <th>Amallar</th>
+        </tr>
+      </thead>
+      <tbody id="managers-tbody"></tbody>
+    </table>
+  </div>
+  <div class="pagination" id="managers-pagination"></div>
+</div>
+
+<!-- Assistants — superadmin + manager -->
+<div id="assistants-section" class="hidden">
+  <h2>Yordamchilar</h2>
+
+  <div class="card hidden" id="assistant-form-card">
+    <h2 id="assistant-form-title">Yordamchi qo'shish</h2>
+    <form class="inline-form" id="assistant-form">
+      <input type="hidden" id="assistant-id">
+      <div class="field">
+        <label for="assistant-username">Foydalanuvchi nomi</label>
+        <input type="text" id="assistant-username" minlength="3" maxlength="64" required>
+      </div>
+      <div class="field">
+        <label for="assistant-full-name">To'liq ism</label>
+        <input type="text" id="assistant-full-name" minlength="3" maxlength="64" required>
+      </div>
+      <div class="field">
+        <label for="assistant-password">Parol</label>
+        <input type="password" id="assistant-password" minlength="8" required>
+      </div>
+      <button type="submit">Saqlash</button>
+      <button type="button" class="secondary" id="assistant-cancel-btn">Bekor qilish</button>
+    </form>
+    <p class="muted" id="assistant-password-note"></p>
+  </div>
+
+  <button id="assistant-add-btn">+ Yordamchi qo'shish</button>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Foydalanuvchi nomi</th>
+          <th>To'liq ism</th>
+          <th>Holati</th>
+          <th>Amallar</th>
+        </tr>
+      </thead>
+      <tbody id="assistants-tbody"></tbody>
+    </table>
+  </div>
+  <div class="pagination" id="assistants-pagination"></div>
+</div>
+
+<!-- My account — superadmin (username/password) or manager (username/full name/password) -->
+<div id="account-section" class="hidden">
+  <h2>Mening hisobim</h2>
+  <div class="card">
+    <form class="inline-form" id="account-form">
+      <div class="field">
+        <label for="account-username">Foydalanuvchi nomi</label>
+        <input type="text" id="account-username">
+      </div>
+      <div class="field hidden" id="account-full-name-field">
+        <label for="account-full-name">To'liq ism</label>
+        <input type="text" id="account-full-name" minlength="3" maxlength="64">
+      </div>
+      <div class="field">
+        <label for="account-password">Parol</label>
+        <input type="password" id="account-password" minlength="8">
+      </div>
+      <button type="submit">Ma'lumotlarimni yangilash</button>
+    </form>
+    <p class="muted" id="account-note"></p>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/users.js"></script>
+{% endblock %}

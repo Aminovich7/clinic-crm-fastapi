@@ -302,7 +302,7 @@ async def consultations_report_endpoint(
     date_from: date | None = Query(default=None),
     date_to: date | None = Query(default=None),
     format: Literal["json", "xlsx"] = Query(default="json"),
-    actor: User = Depends(require_roles(*ALL_ROLES)),
+    actor: User = Depends(require_roles(*MANAGE_ROLES)),
     db: AsyncSession = Depends(get_db),
 ):
     try:
@@ -320,7 +320,7 @@ async def surgeries_report_endpoint(
     date_from: date | None = Query(default=None),
     date_to: date | None = Query(default=None),
     format: Literal["json", "xlsx"] = Query(default="json"),
-    actor: User = Depends(require_roles(*ALL_ROLES)),
+    actor: User = Depends(require_roles(*MANAGE_ROLES)),
     db: AsyncSession = Depends(get_db),
 ):
     try:
@@ -338,7 +338,7 @@ async def rooms_report_endpoint(
     date_from: date | None = Query(default=None),
     date_to: date | None = Query(default=None),
     format: Literal["json", "xlsx"] = Query(default="json"),
-    actor: User = Depends(require_roles(*ALL_ROLES)),
+    actor: User = Depends(require_roles(*MANAGE_ROLES)),
     db: AsyncSession = Depends(get_db),
 ):
     try:

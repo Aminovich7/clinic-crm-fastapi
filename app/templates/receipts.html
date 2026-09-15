@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block title %}Kvitansiyalar — Klinika CRM{% endblock %}
+{% block content %}
+<h1>Kvitansiyalar</h1>
+
+<div id="error-container"></div>
+<div id="success-container"></div>
+
+<div class="tabs">
+  <button type="button" class="tab-btn active" data-tab="consultation">Ko'rik</button>
+  <button type="button" class="tab-btn" data-tab="surgery">Operatsiya</button>
+  <button type="button" class="tab-btn" data-tab="room">Xona</button>
+</div>
+
+<!-- Consultation form -->
+<div class="card tab-panel" id="panel-consultation">
+  <h2 id="c_form_title">Yangi ko'rik</h2>
+  <form class="inline-form" id="consultation-form">
+    <input type="hidden" id="c_id">
+    <div class="field">
+      <label for="c_type">Turi</label>
+      <select id="c_type" required>
+        <option value="korik">Ko'rik</option>
+        <option value="qaytakorik">Qayta ko'rik</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="c_receipt_number">Chek raqami</label>
+      <input type="number" id="c_receipt_number" min="1" required>
+    </div>
+    <div class="field">
+      <label for="c_date">Sana</label>
+      <input type="datetime-local" id="c_date">
+    </div>
+    <div class="field">
+      <label for="c_doctor">Shifokor</label>
+      <select id="c_doctor"></select>
+    </div>
+    <div class="field">
+      <label for="c_amount">Summa</label>
+      <input type="number" id="c_amount" min="0" required>
+    </div>
+    <div class="field">
+      <label for="c_doctor_percent">Shifokor foizi</label>
+      <input type="number" id="c_doctor_percent" min="0" max="100" step="0.01" required>
+    </div>
+    <div class="field">
+      <label for="c_minus_beshming">Minus beshming</label>
+      <input type="number" id="c_minus_beshming" min="0" placeholder="standart">
+    </div>
+    <button type="submit" id="c_submit_btn">Qo'shish</button>
+    <button type="button" class="secondary hidden" id="c_cancel_btn">Tahrirlashni bekor qilish</button>
+  </form>
+  <div class="muted" id="c_preview"></div>
+</div>
+
+<!-- Surgery form -->
+<div class="card tab-panel hidden" id="panel-surgery">
+  <h2 id="s_form_title">Yangi operatsiya</h2>
+  <form class="inline-form" id="surgery-form">
+    <input type="hidden" id="s_id">
+    <div class="field">
+      <label for="s_receipt_number">Chek raqami</label>
+      <input type="number" id="s_receipt_number" min="1" required>
+    </div>
+    <div class="field">
+      <label for="s_date">Sana</label>
+      <input type="datetime-local" id="s_date">
+    </div>
+    <div class="field">
+      <label for="s_doctor">Shifokor</label>
+      <select id="s_doctor"></select>
+    </div>
+    <div class="field">
+      <label for="s_amount">Summa</label>
+      <input type="number" id="s_amount" min="0" required>
+    </div>
+    <div class="field">
+      <label for="s_surgery_expense">Xarajat</label>
+      <input type="number" id="s_surgery_expense" min="0" required>
+    </div>
+    <div class="field">
+      <label for="s_doctor_percent">Shifokor foizi</label>
+      <input type="number" id="s_doctor_percent" min="0" max="100" step="0.01" required>
+    </div>
+    <button type="submit" id="s_submit_btn">Qo'shish</button>
+    <button type="button" class="secondary hidden" id="s_cancel_btn">Tahrirlashni bekor qilish</button>
+  </form>
+  <div class="muted" id="s_preview"></div>
+</div>
+
+<!-- Room form -->
+<div class="card tab-panel hidden" id="panel-room">
+  <h2 id="r_form_title">Yangi xona</h2>
+  <form class="inline-form" id="room-form">
+    <input type="hidden" id="r_id">
+    <div class="field">
+      <label for="r_receipt_number">Chek raqami</label>
+      <input type="number" id="r_receipt_number" min="1">
+    </div>
+    <div class="field">
+      <label for="r_date">Sana</label>
+      <input type="datetime-local" id="r_date">
+    </div>
+    <div class="field">
+      <label for="r_doctor">Shifokor</label>
+      <select id="r_doctor"></select>
+    </div>
+    <div class="field">
+      <label for="r_amount">Summa</label>
+      <input type="number" id="r_amount" min="0" required>
+    </div>
+    <div class="field">
+      <label for="r_doctor_percent">Shifokor foizi</label>
+      <input type="number" id="r_doctor_percent" min="0" max="100" step="0.01" required>
+    </div>
+    <button type="submit" id="r_submit_btn">Qo'shish</button>
+    <button type="button" class="secondary hidden" id="r_cancel_btn">Tahrirlashni bekor qilish</button>
+  </form>
+  <div class="muted" id="r_preview"></div>
+</div>
+
+<h2>So'nggi yozuvlar</h2>
+<div class="table-wrap">
+  <table>
+    <thead id="recent-thead"></thead>
+    <tbody id="recent-tbody"></tbody>
+  </table>
+</div>
+<div class="pagination" id="pagination"></div>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/receipts.js"></script>
+{% endblock %}

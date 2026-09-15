@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Boshqaruv paneli — Klinika CRM{% endblock %}
+{% block content %}
+<h1>Boshqaruv paneli</h1>
+
+<div class="card">
+  <form class="inline-form" id="range-form">
+    <div class="field">
+      <label for="date_from">Dan</label>
+      <input type="date" id="date_from" required>
+    </div>
+    <div class="field">
+      <label for="date_to">Gacha</label>
+      <input type="date" id="date_to" required>
+    </div>
+    <button type="submit">Yangilash</button>
+  </form>
+</div>
+
+<div id="error-container"></div>
+
+<div class="grid" id="summary-cards"></div>
+
+<h2>Bo'limlar bo'yicha</h2>
+<div class="grid" id="section-cards"></div>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/dashboard.js"></script>
+{% endblock %}

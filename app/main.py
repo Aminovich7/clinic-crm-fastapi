@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from sqlalchemy import text
@@ -14,6 +15,7 @@ from app.doctors.router import router as doctors_router
 from app.finance.router import router as finance_router
 from app.users.router import router as users_router
 from app.users.seed import seed_superadmin
+from app.web.router import router as web_router
 
 
 @asynccontextmanager
@@ -27,6 +29,8 @@ app = FastAPI(title="clinic-crm", lifespan=lifespan)
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 
 @app.get("/health")
@@ -65,3 +69,4 @@ app.include_router(users_router)
 app.include_router(doctors_router)
 app.include_router(finance_router)
 app.include_router(audit_router)
+app.include_router(web_router)

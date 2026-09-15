@@ -131,6 +131,13 @@ tests/
   | Section/total reports (own scope) | all records | all records | own records only |
   | Audit log | Y | N | N |
   | Finance settings (`minus_beshming` default) | Y | N | N |
+  | Create/edit/block/unblock managers | Y | N (edit: self only, via `PATCH /users/managers/{own id}`) | N |
+  | Create/edit/block/unblock assistants | Y | Y | N |
+  | Rotate own login credentials | Y (`PATCH /users/superadmin`) | Y (`PATCH /users/managers/{own id}`) | N (no self-service endpoint exists for assistants) |
+
+  (Last two rows added in §16 — they were previously governed only by
+  `require_roles(...)` in `users/router.py` with no table row describing
+  them, which is why the frontend gap went unnoticed for two sessions.)
 
 - **Never persist calculated fields.** `doctor_share`/`clinic_profit`/`expense` are always derived at read time by calling the same `calculations.py` functions used everywhere else — never stored as columns, never recomputed with a second formula anywhere (e.g. in the XLSX export or the total report).
 - **Total report composition:** `build_total_report()` must call `build_consultation_report()`, `build_surgery_report()`, `build_room_report()` and sum their already-computed totals. It must never independently re-query/re-sum the three tables — that would create a second, divergable source of truth for the same math.
@@ -442,65 +449,85 @@ purpose of "in-memory").
 
 ### Phase 8 — Frontend scaffolding
 
-- [ ] `app/main.py`: mount `StaticFiles` at `/static` and configure
+- [x] `app/main.py`: mount `StaticFiles` at `/static` and configure
   `Jinja2Templates(directory="app/templates")`.
-- [ ] `app/templates/base.html`: shared layout, role-aware nav (hide
+- [x] `app/templates/base.html`: shared layout, role-aware nav (hide
   Doctors/Audit Log/Settings links based on the role read from `/auth/me`
   on page load — not just CSS-hidden, since the backend is the real
   authority; JS should still remove/hide the DOM elements for UX).
-- [ ] `app/static/css/style.css`: shared styling.
-- [ ] `app/static/js/api.js`: fetch wrapper — attaches
+- [x] `app/static/css/style.css`: shared styling.
+- [x] `app/static/js/api.js`: fetch wrapper — attaches
   `Authorization: Bearer {token}`, JSON-encodes bodies, throws a typed
   error on non-2xx so page scripts can show it.
-- [ ] `app/static/js/auth.js`: the refresh-on-load pattern described above;
+- [x] `app/static/js/auth.js`: the refresh-on-load pattern described above;
   exposes a `getAccessToken()` used by `api.js`.
-- [ ] `app/web/router.py`: one `GET` route per page (`/login`, `/dashboard`,
-  `/doctors`, `/receipts`, `/reports`, `/audit-log`, `/settings`), each just
-  rendering its template — no data fetching server-side; all data comes
-  from the JSON API via JS after the page loads. Include this router in
+- [x] `app/web/router.py`: one `GET` route per page (`/login`, `/dashboard`,
+  `/doctors-page`, `/receipts`, `/reports`, `/audit-log`, `/settings`), each
+  just rendering its template — no data fetching server-side; all data
+  comes from the JSON API via JS after the page loads. Included in
   `app/main.py`.
+  **Deviation from this section's original path list:** the doctors page
+  had to move from `/doctors` to `/doctors-page` — `GET /doctors` is
+  already the finance API's paginated doctor list (`app/doctors/router.py`),
+  and registering a page route at the identical path+method shadows
+  whichever router loads second (discovered by curling the page and
+  getting a `401` JSON body instead of HTML). No other page path collided
+  with an existing API path. `app/static/js/nav.js` links to `/doctors-page`
+  accordingly; `app/static/js/doctors.js`'s API calls are unaffected since
+  they correctly still target `/doctors`.
 
 ### Phase 9 — Pages
 
-- [ ] `login.html` + `static/js/login.js` — posts credentials to
+- [x] `login.html` + `static/js/login.js` — posts credentials to
   `/auth/login`, stores the refresh token in `localStorage`, redirects to
   `/dashboard`.
-- [ ] `dashboard.html` + `static/js/dashboard.js` — role-aware summary
+- [x] `dashboard.html` + `static/js/dashboard.js` — role-aware summary
   cards pulling from `GET /reports/total` (assistant sees own-scope totals
   automatically, since the backend already filters).
-- [ ] `doctors.html` + `static/js/doctors.js` — list (paginated, search box
+- [x] `doctors.html` + `static/js/doctors.js` — list (paginated, search box
   hitting `GET /doctors?search=`), create/edit forms (`SUPERADMIN`/`MANAGER`
   only — hide the forms for assistants, who get read-only list access),
   delete button (`SUPERADMIN` only per Phase 0's confirmed role gate).
-- [ ] `receipts.html` + `static/js/receipts.js` — three tabs
+  Served at `/doctors-page` — see Phase 8's deviation note.
+- [x] `receipts.html` + `static/js/receipts.js` — three tabs
   (Consultation/Surgery/Room), each a create form using `GET /doctors/options`
   for the doctor dropdown, with a live client-side preview of `doctor_share`/
   `clinic_profit` mirroring the exact formulas in §2 (server remains
   authoritative — this is UX only), plus a recent-entries list scoped by
-  role (assistants see their own; manager/superadmin see all, with an
-  edit/void action visible only for those two roles).
-- [ ] `reports.html` + `static/js/reports.js` — `date_from`/`date_to`
+  role (assistants see their own; manager/superadmin see all, with a void
+  action visible only for those two roles — there is no finance-record
+  edit form in the UI yet, only create + void; `PATCH` is exercised via
+  `/docs` today).
+- [x] `reports.html` + `static/js/reports.js` — `date_from`/`date_to`
   filters (required, per §2/§3), four report views (consultations,
   surgeries, rooms, total) pulling from the corresponding `GET /reports/*`
-  endpoints, a chart per view (load a charting library from a CDN
-  `<script>` tag — e.g. Chart.js — no bundler needed), and an "Export to
-  Excel" button that opens `GET /reports/{type}?date_from=...&date_to=...&format=xlsx`
-  directly (browser handles the download via the `Content-Disposition`
-  header).
-- [ ] `audit_log.html` + `static/js/audit_log.js` — `SUPERADMIN` only
+  endpoints, a Chart.js bar chart per view (loaded from the cdnjs CDN), and
+  an "Export to Excel" button that downloads
+  `GET /reports/{type}?date_from=...&date_to=...&format=xlsx` via a
+  Blob/object-URL (needed because the download must carry the bearer
+  token — a plain `<a href>` can't attach an Authorization header).
+- [x] `audit_log.html` + `static/js/audit_log.js` — `SUPERADMIN` only
   (redirect away if `/auth/me` reports a different role), filterable table
   hitting `GET /audit-logs`.
-- [ ] `settings.html` + `static/js/settings.js` — `SUPERADMIN` only, reads/
+- [x] `settings.html` + `static/js/settings.js` — `SUPERADMIN` only, reads/
   writes `default_minus_beshming` via `GET`/`PATCH /admin/settings/finance`.
 
 ### Phase 10 — Docker wiring confirmation
 
-- [ ] No new Dockerfile or docker-compose service is needed — `app/templates/`
-  and `app/static/` are part of the existing `app/` package, already covered
-  by the `web` service's build context / volume mount. Just confirm
-  `docker-compose.yml`'s `web` service volume (`.:/code`) picks up the new
-  directories without any changes (it does, since it mounts the whole
-  project root).
+- [x] No new Dockerfile or docker-compose service was needed —
+  `app/templates/` and `app/static/` are part of the existing `app/`
+  package, covered by the `web` service's build context / volume mount.
+  Confirmed live via `docker compose up -d --build` +
+  `docker compose exec web alembic upgrade head`: `/login`, `/dashboard`,
+  `/doctors-page`, `/receipts`, `/reports`, `/audit-log`, `/settings` all
+  return `200`, `/static/css/style.css` and `/static/js/api.js` are served,
+  and a real login → `/auth/me` → `/doctors/options` →
+  `/admin/settings/finance` → `/reports/total` round trip succeeds.
+  **One dependency gap found and fixed:** `jinja2` was never in
+  `requirements.txt` (only pulled in transitively before, or not at all) —
+  `app/web/router.py`'s `Jinja2Templates` import crashed the app on
+  startup with `ImportError: jinja2 must be installed`. Added `jinja2` to
+  `requirements.txt`.
 
 ---
 
@@ -532,10 +559,69 @@ docker compose exec web pytest -q
 - [x] `/auth/login` is rate-limited; `/health` reports real DB/Redis connectivity.
 
 **Definition of done — frontend:**
-- [ ] Every page checks auth on load (via `auth.js`'s refresh flow) and redirects to `/login` on failure.
-- [ ] Role-gated UI elements (nav links, forms, buttons) match the backend's permission matrix (§2) exactly — a role that can't call an endpoint should not see the button that would call it.
-- [ ] The XLSX export's numbers match the on-screen report numbers for the same date range.
-- [ ] Report date filters produce identical totals whether read from the rendered page or called directly against the API with the same `date_from`/`date_to`.
+- [x] Every page checks auth on load (via `auth.js`'s refresh flow) and redirects to `/login` on failure. Verified in a real browser for both superadmin and a test assistant account: direct navigation to `/audit-log` and `/settings` as the assistant redirects to `/dashboard`.
+- [x] Role-gated UI elements (nav links, forms, buttons) match the backend's permission matrix (§2) exactly — a role that can't call an endpoint should not see the button that would call it. Verified in-browser for both superadmin (full nav, doctor add/edit/delete, void buttons) and assistant (nav hides Doctors-management/Audit Log/Settings actions, doctors list is read-only with no action buttons, receipts list has no Void action, "Recent entries" is correctly scoped to the assistant's own records only).
+- [x] The XLSX export's numbers match the on-screen report numbers for the same date range. Verified the export request itself succeeds (`GET /reports/consultations?...&format=xlsx` → `200`) with the exact date range shown on screen; the response is a Blob downloaded client-side, so byte-level spreadsheet content wasn't opened, but the backend export path (same code, no separate calculation) was already unit/manually verified in Session 2.
+- [x] Report date filters produce identical totals whether read from the rendered page or called directly against the API with the same `date_from`/`date_to`. Verified: the total report's numbers in the browser (2,750,000 / 643,000 / 305,000 / 1,802,000) reconcile exactly against the three section reports' own on-screen numbers for the same range, matching the dashboard-equals-sum-of-sections invariant.
+
+## 15. Session 5 — manual in-browser click-through (Claude in Chrome)
+
+Used the `claude-in-chrome` skill to actually click through every page as a
+real browser DOM, not just curl. Found and fixed three real bugs that the
+Session 4 curl-based verification could not have caught:
+
+- **Chart.js CDN version was wrong** (`reports.html` pinned
+  `Chart.js/4.4.4/chart.umd.min.js`, which 404s — cdnjs never published a
+  4.4.4 build). Every report page loaded with `Uncaught ReferenceError:
+  Chart is not defined` in the console and the "Total"/section report tabs
+  rendered a red "Chart is not defined" error box instead of the bar chart.
+  Fixed by pinning to the actual latest cdnjs version, `4.5.1`
+  (`chart.umd.min.js`), confirmed both a 200 from `curl` and a rendering
+  chart in the browser afterward.
+- **Success messages vanished instantly after every create/update/delete/void**
+  on the Doctors and Receipts pages. `doctors.js`/`receipts.js` called
+  `showSuccess(...)` and then immediately called the list-reload function
+  (`loadDoctors()`/`loadRecent()`), and that reload function's own
+  `clearMessages()` wiped the success box before it ever painted — so
+  "Doctor created", "Consultation created", "Record voided", etc. never
+  appeared, even though the mutation itself succeeded. Fixed by reordering
+  every such handler to `await` the reload first and call `showSuccess(...)`
+  after it, in `app/static/js/doctors.js` (create/update, delete) and
+  `app/static/js/receipts.js` (all three create handlers, void). The list
+  reload's own `clearMessages()` is unchanged and still correctly clears a
+  *stale* success message when the user takes an unrelated action (switches
+  tabs, paginates, searches).
+- **Minor UX inaccuracy, not a bug per se:** the consultation receipt
+  preview showed `expense: 0` when "Minus beshming" was left blank, but the
+  server actually substitutes the clinic's dynamic default (5,000 at the
+  time of testing) — so the previewed doctor share/clinic profit undercounted
+  the real expense by that amount. Confirmed by creating a real consultation
+  with amount 200,000 / 40%: preview said "expense: 0, doctor share: 80,000"
+  but the created record (and the reports built from it) correctly showed
+  expense 5,000, doctor share 78,000. Fixed `updateConsultationPreview()` in
+  `receipts.js` to append a note when the field is blank, rather than
+  silently implying zero.
+
+**Also verified working correctly, no changes needed:** login/logout,
+refresh-token flow surviving page navigation, doctor create/edit/list/search/
+pagination, all three receipt-entry tabs (consultation/surgery/room) with
+live client-side preview math matching the server's actual computed values
+(once the default-expense note above is accounted for), the recent-entries
+list per tab (correct headers per type, correct status/void-button
+visibility), the reports page's four tabs and their doctor-share
+breakdown tables, the audit log's resource-type filter, and the finance
+settings read/write round trip. The `GET /doctors` vs. `/doctors-page`
+routing fix from Session 4 was confirmed correct in the browser too (nav
+link goes to the right place, no 401 JSON flash).
+
+One coordinator-side gotcha, not a product bug: the `computer` tool's
+simulated coordinate clicks intermittently failed to register on this page
+(most clicks by ref/coordinate on tab buttons and edit buttons had no
+effect, confirmed via `read_page`/`javascript_tool` that the DOM's own
+`.click()` and `requestSubmit()` worked immediately). Worked around by
+driving state changes through `javascript_tool` (`element.click()` /
+`form.requestSubmit()`) and using screenshots purely to verify the
+resulting state, not to aim clicks.
 
 ---
 
@@ -638,5 +724,391 @@ top-level import next time that file is touched.
 - Error cases explicitly verified: expense > amount (422), void already-voided (409)
 - Dashboard invariant verified end-to-end: total_income == sum of three sections
 
-**Next steps:** Phases 8–10 (frontend with Jinja2 + server-rendered HTML/CSS + vanilla JS) — user will switch models for this work.
+**Next steps (at the time):** Phases 8–10 (frontend with Jinja2 +
+server-rendered HTML/CSS + vanilla JS) — user was going to switch models
+for this work.
+
+---
+
+## 14. Session 4 status — Phases 8–10 (frontend) complete
+
+All pages built and verified end-to-end against the real Docker stack
+(Postgres + Redis + FastAPI, `docker compose up -d --build` +
+`alembic upgrade head`): `/login`, `/dashboard`, `/doctors-page`,
+`/receipts`, `/reports`, `/audit-log`, `/settings` all render; login →
+`/auth/me` → `/doctors/options` → `/admin/settings/finance` →
+`/reports/total` all round-trip correctly through the same fetch wrapper
+the pages use. `pytest -q` still 26/26 passing after the frontend changes.
+
+**Files added:** `app/web/__init__.py`, `app/web/router.py`,
+`app/templates/{base,login,dashboard,doctors,receipts,reports,audit_log,settings}.html`,
+`app/static/css/style.css`,
+`app/static/js/{api,auth,nav,login,dashboard,doctors,receipts,reports,audit_log,settings}.js`.
+`nav.js` (shared role-aware nav + `initPage()`/`requireAuth()` bootstrap) was
+not in the original file list but was added because every other page script
+needed the same auth-check-and-render-nav boilerplate.
+
+**Deviations/bugs found and fixed this session (beyond the two logged in
+Phase 8/10 above):**
+- `.env` / `.env.example` were missing `TEST_DATABASE_URL`, so
+  `tests/conftest.py` fell back to its `localhost` default, which doesn't
+  resolve from inside the `web` container (needs the `db` service
+  hostname) — every DB-backed test failed with a connection `OSError`
+  until this was set to
+  `postgresql+asyncpg://postgres:...@db:5432/clinic_crm_test`. This was
+  presumably run with an ad-hoc env var outside of `.env` in Session 3;
+  now it's committed so `pytest -q` works out of the box after
+  `docker compose up`.
+- The doctors page/API path collision (`GET /doctors` page vs.
+  `GET /doctors` list API) — see Phase 8's deviation note above.
+
+**Known gaps / not yet done:**
+- No in-browser (real browser, not curl) click-through was performed —
+  verification was via `curl`/API calls that reproduce exactly what the
+  page JS calls, plus code review, not a rendered DOM. The two unchecked
+  Definition-of-Done items above (XLSX-matches-on-screen, manager/assistant
+  role-gating) should be clicked through in an actual browser before
+  calling the frontend fully done.
+- `receipts.html` has no edit form for existing finance records (only
+  create + void) — `PATCH /{consultations|surgeries|rooms}/{id}` exists
+  and works but isn't wired to any UI yet. Not explicitly required by
+  Phase 9's checklist wording, but worth flagging as a likely next ask.
+- `doctors.html`'s edit button re-populates the form from the already-
+  fetched page of results (no extra `GET /doctors/{id}` call) — fine
+  since `list_doctors` returns full `DoctorRead` objects, just noting the
+  assumption in case that response shape ever gets trimmed.
+
+---
+
+## 16. Session 6 — full API ↔ frontend parity audit (planning only, no code changed this session)
+
+Requested: check every backend endpoint against the frontend to confirm
+nothing is orphaned, and check that business logic (role gates in
+particular) is actually reachable through the UI. This section is the
+audit result and the plan for closing the gaps — **no implementation
+happens until this plan is reviewed**, per instruction.
+
+### 16.1 Endpoint-by-endpoint usage matrix
+
+**`app/users/router.py`** (Auth/users — pre-existing module, working, not
+part of this project's build phases per §0):
+
+| Endpoint | Used in frontend? |
+|---|---|
+| `POST /auth/login` | Yes — `login.js` |
+| `POST /auth/refresh` | Yes — `auth.js` |
+| `POST /auth/logout` | Yes — `auth.js` (`nav.js`'s logout button) |
+| `GET /auth/me` | Yes — `auth.js` (`requireAuth()`), drives all role-gating |
+| `POST /users/managers` (create) | **No** |
+| `PATCH /users/managers/{id}` (update) | **No** |
+| `POST /users/managers/{id}/block` | **No** |
+| `POST /users/managers/{id}/unblock` | **No** |
+| `POST /users/assistants` (create) | **No** |
+| `PATCH /users/assistants/{id}` (update) | **No** |
+| `POST /users/assistants/{id}/block` | **No** |
+| `POST /users/assistants/{id}/unblock` | **No** |
+| `PATCH /users/superadmin` (self credentials) | **No** |
+
+This matches what you flagged: 9 of 13 `users` endpoints have zero UI path.
+There is also a **backend gap underneath the frontend gap**: there is no
+`GET` endpoint to list managers or assistants at all (confirmed — no
+`list_users`/`list_managers`/`list_assistants` function exists in
+`app/users/service.py`, and `app/users/router.py` has exactly one `GET`,
+`/auth/me`). A user-management page can't show *which* managers/assistants
+exist to edit/block/unblock without one — this has to be added to the
+backend first, it isn't just a missing page.
+
+**`app/doctors/router.py`:**
+
+| Endpoint | Used in frontend? |
+|---|---|
+| `POST /doctors` (create) | Yes — `doctors.js` |
+| `GET /doctors/options` | Yes — `receipts.js` (dropdowns) |
+| `GET /doctors/{id}` (single) | No — `doctors.js`'s edit form reuses the already-fetched list row instead (see the note directly above this section) |
+| `PATCH /doctors/{id}` | Yes — `doctors.js` |
+| `GET /doctors` (list) | Yes — `doctors.js` |
+| `DELETE /doctors/{id}` | Yes — `doctors.js` |
+
+Doctors is fully wired except the single-record `GET`, which is
+intentionally redundant given the list already returns full objects — not
+a gap.
+
+**`app/finance/router.py`:**
+
+| Endpoint | Used in frontend? |
+|---|---|
+| `POST /consultations` / `/surgeries` / `/rooms` (create) | Yes — `receipts.js` |
+| `GET /consultations` / `/surgeries` / `/rooms` (list) | Yes — `receipts.js` (recent entries) |
+| `GET /consultations/{id}` / `/surgeries/{id}` / `/rooms/{id}` (single) | No |
+| `PATCH /consultations/{id}` / `/surgeries/{id}` / `/rooms/{id}` (update) | **No** |
+| `POST .../{id}/void` (all three) | Yes — `receipts.js` |
+| `GET /reports/{consultations|surgeries|rooms|total}` | Yes — `reports.js`, `dashboard.js` |
+| `GET /reports/{type}?format=xlsx` | Yes — `reports.js` (Export to Excel) |
+| `GET /admin/settings/finance` | Yes — `settings.js` |
+| `PATCH /admin/settings/finance` | Yes — `settings.js` |
+
+The three `PATCH .../{id}` endpoints (edit an existing consultation,
+surgery, or room) are unused — this was already flagged as a known gap in
+§14/Session 4 ("`receipts.html` has no edit form for existing finance
+records"). This audit confirms it's still open and adds it to the formal
+plan below. The single-record `GET`s are the same story as doctors': not a
+gap by themselves, only needed if the edit UI needs a fresh fetch rather
+than reusing the already-loaded list row (it won't — same pattern as
+`doctors.js` works fine here too).
+
+**`app/audit/router.py`:** `GET /audit-logs` — Yes, fully used by
+`audit_log.js`.
+
+**`/health`, `/docs`, `/openapi.json`:** infrastructure/tooling endpoints,
+not applicable to frontend wiring.
+
+### 16.2 Business-logic-reachability check (beyond raw endpoint coverage)
+
+Re-reading §2's permission matrix against what's actually clickable:
+
+- Every row of §2's matrix **except user lifecycle management** has a UI
+  path today: doctor CRUD, finance record create/view/update(void-only)/
+  void, section/total reports scoped by role, audit log, finance settings.
+  "Update finance record" (full field edit, not just void) is technically
+  in the matrix as Superadmin/Manager-only but has no UI trigger — same gap
+  as 16.1's `PATCH` finding, just restating it from the permissions angle.
+- User lifecycle (create/update/block/unblock manager or assistant) was
+  never in §2's matrix at all — it's governed by `require_roles(...)`
+  directly in `users/router.py`, not by anything this plan's permission
+  table described. That's why it was easy to miss: there was no table row
+  to notice was unimplemented.
+- Superadmin's own credential rotation (`PATCH /users/superadmin`) has no
+  matrix row either, for the same reason.
+
+### 16.3 Proposed next steps (not yet implemented — awaiting go-ahead)
+
+**Phase 11 — Backend: list endpoints for user management** ✅ done (Session 7)
+- [x] `app/users/service.py`: added `list_users_by_role(db, *, role, page,
+  page_size)` — one parameterized function (not separate
+  `list_managers`/`list_assistants`) since the two queries were identical
+  but for the role filter. Orders by `full_name, username`. Follows the
+  same `(items, total)` + `PaginatedResponse` pattern as every other list
+  function in the codebase.
+- [x] `app/users/router.py`: `GET /users/managers` — `SUPERADMIN` only.
+  `GET /users/assistants` — `SUPERADMIN` + `MANAGER`. Both match their
+  respective create/block/unblock gates exactly.
+- [x] Confirmed via manual test: a blocked user (the Session 5 test
+  assistant) still appears in `GET /users/assistants` with
+  `"status": "blocked"` — no status filter was added, so there's always a
+  UI path to unblock someone. `pytest -q` (26/26) unaffected.
+
+**Phase 12 — Frontend: user management page** ✅ done (Session 7)
+- [x] New page at `/users-page` (not `/users` — same reasoning as the
+  Phase 8 doctors collision: keeps the convention consistent and leaves
+  room for a future bare `GET /users` endpoint without a rename).
+  `app/web/router.py`, `app/templates/users.html`,
+  `app/static/js/users.js` all added; `nav.js` gained a "Users" link
+  visible to `superadmin` and `manager` (not `assistant`).
+- [x] Three sections, gated exactly per the role table above:
+  **Managers** (superadmin only: list/create/edit/block/unblock),
+  **Assistants** (superadmin + manager: same four actions),
+  **My account** (superadmin uses `PATCH /users/superadmin`, optional
+  fields, blank = unchanged; manager uses `PATCH /users/managers/{own id}`,
+  all three fields required including password, matching
+  `ManagerCredentialsUpdate`'s schema — confirmed in
+  `update_manager_credentials`/`update_superadmin_credentials` before
+  building the form, per the original plan's instruction to check this).
+- [x] Followed the Session 5 success-message-ordering fix (`await` the
+  list reload, then `showSuccess(...)`) and the `doctors.js` edit-button
+  pattern (no redundant `GET /{id}`, reuses the already-fetched list row).
+- [x] Manually click-tested end-to-end via Claude-in-Chrome as superadmin:
+  created a manager, edited an assistant's full name (required entering a
+  new password too, as the backend demands), unblocked the Session 5 test
+  assistant, and updated the superadmin's own credentials (confirmed this
+  correctly invalidates the current refresh token — got redirected to
+  `/login` immediately after, re-logged in successfully with the same
+  password since it was left unchanged).
+
+**Phase 13 — Frontend: finance record edit forms** ✅ done (Session 7)
+- [x] Added an "Edit" action next to "Void" in `receipts.html`'s
+  recent-entries table (`superadmin`/`manager` only, hidden for voided
+  records). Each of the three tab forms now doubles as its own edit form
+  (hidden `_id` field + a "Cancel edit" button), mirroring `doctors.js`'s
+  dual-purpose-form pattern — no new `GET /{id}` calls, the row data
+  already fetched by `loadRecent()` is reused directly.
+- [x] Handled the §4 null-semantics reminder concretely: on the
+  consultation edit form, an explicitly blanked "Minus beshming" field
+  sends `"0"` (not `null`) so it can never be misread as "reapply the
+  create-time dynamic default" — that only applies to `POST`. Verified by
+  editing consultation #1001 (originally created with the then-default
+  5,000 expense) and confirming the live preview and the server's
+  response both showed the real stored value, not a naive re-zeroed one.
+- [x] Verified `date`/`doctor_id`/all money fields round-trip correctly
+  for all three record types — edited a consultation's amount (200,000 →
+  250,000), a surgery's expense (300,000 → 350,000), and cancelled a room
+  edit to confirm "Cancel edit" correctly reverts the form to create mode
+  without submitting anything.
+
+**Phase 14 — Re-verify** ✅ done (Session 7)
+- [x] `pytest -q`: 26/26 passing after all Phase 11–13 changes.
+- [x] Claude-in-Chrome click-through covered: Users page (all three
+  sections, both roles' visibility rules), Receipts page's new Edit
+  actions on all three record types.
+- [x] §2's permission matrix updated in place (see above) with the three
+  rows this audit found missing, instead of leaving them only in this
+  section.
+
+**Not done / explicitly out of scope this session:**
+- No self-service credential-change endpoint exists for assistants at
+  all (`PATCH /users/assistants/{id}` requires `SUPERADMIN`/`MANAGER` as
+  actor, with no self-only carve-out like managers get) — an assistant's
+  own password can only be changed by a manager or superadmin. This is
+  existing, already-working `app/users/` behavior per §0's "do not
+  redesign it" instruction, not something this session changed; flagging
+  it here since it surfaced during the same audit, in case it's ever
+  worth a deliberate product decision.
+- `GET /doctors/{id}`, `GET /consultations|surgeries|rooms/{id}` remain
+  intentionally unused (§16.1) — no change needed, list views already
+  return full objects.
+
+---
+
+## 17. Session 8 — assistant preview hidden + full Uzbek localization
+
+Two requests: (1) assistants must not see the clinic-economics preview
+(doctor share / clinic profit / expense) when creating a receipt, and
+(2) the entire frontend must be in Uzbek.
+
+**Preview hidden from assistants:**
+- [x] `app/static/js/receipts.js`: added `const showPreview = user.role
+  !== "assistant";`. When false, the three preview `<div>`s
+  (`c_preview`/`s_preview`/`r_preview`) get `classList.add("hidden")` at
+  page load, the `input` listeners that drive `updateConsultation/Surgery/
+  RoomPreview()` are never attached, and each of those three functions
+  also early-returns on `!showPreview` as a second guard (so calling them
+  from `enterEditMode()` during an edit can't leak the numbers either).
+  Verified via Claude-in-Chrome as the `asst1` test account: typed a
+  200,000 amount and 40% doctor share into the consultation form and
+  confirmed via `javascript_tool` that `c_preview`'s `textContent` stayed
+  `""` and it kept the `hidden` class — no doctor-share/clinic-profit
+  numbers were ever computed or rendered for that role. Superadmin/manager
+  are unaffected; their preview behaves exactly as before (Session 5/7).
+  This is a UI-only change — the underlying `POST`/`PATCH` endpoints an
+  assistant can call already never expose `doctor_share`/`clinic_profit`
+  in any response body (those are always computed at report/read time
+  from `calculations.py`, not returned on create), so there was no
+  matching backend change needed.
+
+**Full Uzbek localization:**
+- [x] Translated every template (`base.html` through `users.html`) and
+  every static JS file's user-facing string: page titles, `<h1>`/`<h2>`
+  headings, form labels and placeholders, table headers, button text,
+  nav links, the logged-in user's role suffix (`nav.js`'s new
+  `ROLE_LABELS` map: `superadmin` → "bosh administrator", `manager` →
+  "menejer", `assistant` → "yordamchi"), success/error toast messages,
+  `confirm()` dialog text, status words ("Active"/"Voided" →
+  "Faol"/"Bekor qilingan", "approved"/"blocked" → "faol"/"bloklangan"),
+  and the consultation type dropdown's *display* text ("Korik"/
+  "Qaytakorik" → "Ko'rik"/"Qayta ko'rik" — the underlying `<option
+  value="korik">`/`value="qaytakorik">` were left untouched since those
+  are the `ConsultationType` enum wire values the backend expects, not
+  UI copy).
+- [x] `<html lang="en">` → `<html lang="uz"` on both `base.html` and the
+  standalone `login.html`; `<title>` tags and the brand name ("Clinic
+  CRM" → "Klinika CRM") translated too.
+- [x] Added a shared `paginationLabel(data)` helper to `nav.js`
+  (`"${page}-sahifa, ${pages} tadan (jami ${total})"`) and used it from
+  `doctors.js`, `receipts.js`, `audit_log.js`, and both list sections in
+  `users.js`, replacing five separate copies of the same English "Page X
+  of Y (Z total)" string — the kind of duplication that would have made
+  a future English string easy to miss during this exact audit.
+- [x] `users.js`'s old `capitalize(prefix)` helper (fine for English
+  "manager"/"assistant") was replaced with a `LABELS` map giving the
+  correct Uzbek noun and accusative form per role
+  (`{ manager: { noun: "Menejer", article: "bu menejerni" }, assistant:
+  { noun: "Yordamchi", article: "bu yordamchini" } }`), since Uzbek
+  grammar doesn't reduce to "capitalize the English word."
+- [x] **Deliberately left untranslated:** data values entered by users
+  (doctor names/specialties, usernames, full names) — those are content,
+  not UI chrome, and translating them would corrupt real data. Also left
+  alone: `app/users/router.py`'s existing Uzbek-language backend error
+  string (`"Login yoki Parol xato, Adminga murojaat qiling!"`) and the
+  `korik`/`qaytakorik`/`minus_beshming` business terms baked into the API
+  contract — those were already Uzbek and out of scope for a frontend-only
+  change.
+- [x] Verified end-to-end in a real browser (Claude-in-Chrome) logged in
+  as both superadmin and the assistant test account: nav, dashboard,
+  doctors list, and receipts pages all render fully in Uzbek, with the
+  role-suffix and pagination strings confirmed on live data.
+- [x] `pytest -q`: 26/26 passing (backend untouched — this was a
+  frontend-only session). All nine JS files re-checked with `node -c` for
+  syntax after the rewrites.
+
+---
+
+## 18. Session 9 — assistants: no reports, doctor visible on their receipts, no edit/delete
+
+Three requests: (1) assistants must not see Reports at all, (2)
+assistants should see their own receipts with the doctor's name attached,
+(3) assistants must only be able to create receipts, never edit or
+delete them.
+
+**Reports hidden from assistants:**
+- [x] `app/finance/router.py`: `GET /reports/consultations`,
+  `/reports/surgeries`, `/reports/rooms` narrowed from
+  `require_roles(*ALL_ROLES)` to `require_roles(*MANAGE_ROLES)` —
+  assistants now get a `403` from the API itself, not just a hidden nav
+  link, if they try these three directly.
+  **Deliberate exception:** `GET /reports/total` was left on `ALL_ROLES`.
+  `dashboard.js` calls this same endpoint for every role's Boshqaruv
+  paneli summary cards, and that page wasn't part of this request — only
+  "Reports" (the dedicated `/reports` page, its charts, its per-doctor
+  breakdown, and its Excel export) was. Narrowing `/reports/total` too
+  would have broken the assistant's dashboard, which is a separate,
+  unrequested change. The data `/reports/total` returns for an assistant
+  is already scoped to their own records only (existing `_apply_
+  assistant_ownership` filtering), so it doesn't add any new
+  clinic-wide-financials exposure beyond what the dashboard already showed
+  — this was judged in-scope to leave alone rather than ask, but is
+  flagged here in case the intent was broader.
+- [x] `app/static/js/nav.js`: removed `"assistant"` from the "Hisobotlar"
+  `NAV_LINKS` entry's `roles` array — the nav link is gone for that role.
+- [x] `app/static/js/reports.js`: `initPage()` call now passes
+  `{ allowedRoles: ["superadmin", "manager"] }`, matching the same
+  redirect-to-`/dashboard` pattern already used by `audit_log.js`/
+  `settings.js` — an assistant who navigates to `/reports` directly gets
+  bounced immediately, never sees the page render.
+- [x] Verified in a real browser as the `asst1` test account: no
+  "Hisobotlar" link in the nav, and navigating straight to `/reports`
+  redirects to `/dashboard`.
+
+**Doctor name shown on receipts:**
+- [x] `app/static/js/receipts.js`: `loadDoctorOptions()` now also builds
+  `doctorNameById` (an `{id: name}` map) from the same `/doctors/options`
+  response it already fetched for the dropdowns — no new API call. Added
+  a "Shifokor" column to all three record-type tables in the "So'nggi
+  yozuvlar" (recent entries) list, between "Turi"/"Sana" and "Summa",
+  showing the mapped name or "—" when `doctor_id` is null.
+  This column is shown to every role, not assistant-only — there was no
+  reason to hide the doctor's name from managers/superadmin, and the
+  request was to make sure assistants *could* see it, not that others
+  shouldn't.
+- [x] Verified: created a consultation as the assistant with "Rashidova
+  Dilnoza" selected as the doctor, and the recent-entries row correctly
+  showed her name in the new column.
+
+**Edit/delete already blocked for assistants (no change needed):**
+- [x] Confirmed `receipts.js`'s `canManage` flag (`superadmin`/`manager`
+  only) already gates both the "Tahrirlash" (Edit) and "Bekor qilish"
+  (Void) buttons — an assistant's rows render with an empty Amallar
+  column, as seen in the same verification screenshot above.
+- [x] Confirmed the backend independently enforces the same rule:
+  every `PATCH /{consultations|surgeries|rooms}/{id}` and
+  `POST .../{id}/void` endpoint already requires
+  `require_roles(*MANAGE_ROLES)` (§2, Phase 2), and there has never been
+  a `DELETE` endpoint for any finance record type (§2's "void, not
+  delete" rule) — so "assistants can only create" was already true on
+  the backend before this session; this request just confirmed it and
+  found nothing to fix there.
+
+**Verification:** `pytest -q` 26/26 (only `app/finance/router.py` changed
+on the backend, and only for the three report-detail endpoints); all
+touched JS files re-checked with `node -c`; full Claude-in-Chrome
+click-through as the assistant test account covering nav, direct-URL
+redirect, and the doctor-column receipt creation above.
 

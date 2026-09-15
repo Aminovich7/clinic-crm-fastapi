@@ -3,10 +3,11 @@ from datetime import datetime, timezone
 
 
 import jwt
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.common.pagination import PaginatedResponse
 from app.core.rate_limit import limiter
 from app.db.session import get_db
 from app.core.redis import blocklist_token, is_token_blocklisted
@@ -28,6 +29,7 @@ from app.users.service import (
     authenticate_user,
     create_assistant,
     create_manager,
+    list_users_by_role,
     update_assistant_credentials,
     update_manager_credentials,
     issue_token_pair,
@@ -124,6 +126,20 @@ async def read_me(current_user: User = Depends(get_current_user)):
     return current_user
 
 
+@router.get("/users/managers", response_model=PaginatedResponse[UserOut])
+async def list_managers_endpoint(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    _: User = Depends(require_roles(UserRoleEnum.SUPERADMIN)),
+    db: AsyncSession = Depends(get_db),
+):
+    items, total = await list_users_by_role(
+        db, role=UserRoleEnum.MANAGER, page=page, page_size=page_size
+    )
+    pages = (total + page_size - 1) // page_size
+    return PaginatedResponse(items=items, page=page, page_size=page_size, total=total, pages=pages)
+
+
 @router.post(
     "/users/managers", response_model=UserOut, status_code=status.HTTP_201_CREATED
 )
@@ -189,6 +205,20 @@ async def unblock_manager_endpoint(
         target=manager,
         new_status=UserStatusEnum.APPROVED,
     )
+
+
+@router.get("/users/assistants", response_model=PaginatedResponse[UserOut])
+async def list_assistants_endpoint(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    _: User = Depends(require_roles(UserRoleEnum.SUPERADMIN, UserRoleEnum.MANAGER)),
+    db: AsyncSession = Depends(get_db),
+):
+    items, total = await list_users_by_role(
+        db, role=UserRoleEnum.ASSISTANT, page=page, page_size=page_size
+    )
+    pages = (total + page_size - 1) // page_size
+    return PaginatedResponse(items=items, page=page, page_size=page_size, total=total, pages=pages)
 
 
 @router.post(

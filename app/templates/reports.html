@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Hisobotlar — Klinika CRM{% endblock %}
+{% block content %}
+<h1>Hisobotlar</h1>
+
+<div class="card">
+  <form class="inline-form" id="range-form">
+    <div class="field">
+      <label for="date_from">Dan</label>
+      <input type="date" id="date_from" required>
+    </div>
+    <div class="field">
+      <label for="date_to">Gacha</label>
+      <input type="date" id="date_to" required>
+    </div>
+    <button type="submit">Qo'llash</button>
+  </form>
+</div>
+
+<div id="error-container"></div>
+
+<div class="tabs">
+  <button type="button" class="report-tab-btn active" data-report="total">Umumiy</button>
+  <button type="button" class="report-tab-btn" data-report="consultations">Ko'riklar</button>
+  <button type="button" class="report-tab-btn" data-report="surgeries">Operatsiyalar</button>
+  <button type="button" class="report-tab-btn" data-report="rooms">Xonalar</button>
+</div>
+
+<div class="card">
+  <div style="display:flex; justify-content:space-between; align-items:center;">
+    <div class="grid" id="report-summary" style="flex:1"></div>
+    <button type="button" class="secondary" id="export-btn" style="margin-left:16px;">Excelga yuklab olish</button>
+  </div>
+</div>
+
+<div class="card">
+  <canvas id="report-chart" height="90"></canvas>
+</div>
+
+<div class="table-wrap">
+  <table>
+    <thead id="doctor-thead">
+      <tr><th>Shifokor</th><th>Ulush jami</th><th>Yozuvlar soni</th></tr>
+    </thead>
+    <tbody id="doctor-tbody"></tbody>
+  </table>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.5.1/chart.umd.min.js"></script>
+<script src="/static/js/reports.js"></script>
+{% endblock %}

@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Klinika CRM{% endblock %}</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">Klinika CRM</div>
+    <nav class="mainnav" id="mainnav"></nav>
+    <div class="user-info">
+      <span id="current-user-name"></span>
+      <button id="logout-btn" class="secondary">Chiqish</button>
+    </div>
+  </header>
+  <main class="container">
+    {% block content %}{% endblock %}
+  </main>
+
+  <script src="/static/js/api.js"></script>
+  <script src="/static/js/auth.js"></script>
+  <script src="/static/js/nav.js"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

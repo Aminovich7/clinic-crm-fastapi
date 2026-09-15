@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Sozlamalar — Klinika CRM{% endblock %}
+{% block content %}
+<h1>Moliyaviy sozlamalar</h1>
+
+<div id="error-container"></div>
+<div id="success-container"></div>
+
+<div class="card">
+  <form class="inline-form" id="settings-form">
+    <div class="field">
+      <label for="default_minus_beshming">Standart minus beshming</label>
+      <input type="number" id="default_minus_beshming" min="0" required>
+    </div>
+    <button type="submit">Saqlash</button>
+  </form>
+  <p class="muted" id="settings-meta"></p>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/settings.js"></script>
+{% endblock %}

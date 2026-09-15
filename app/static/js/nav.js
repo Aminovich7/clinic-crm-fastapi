@@ -1,0 +1,76 @@
+// Shared nav bootstrap: verifies auth, builds the role-aware nav, wires
+// the logout button. Called by every authenticated page after its own
+// data-loading logic is set up.
+
+const NAV_LINKS = [
+  { href: "/dashboard", label: "Boshqaruv paneli", roles: ["superadmin", "manager", "assistant"] },
+  { href: "/receipts", label: "Kvitansiyalar", roles: ["superadmin", "manager", "assistant"] },
+  { href: "/reports", label: "Hisobotlar", roles: ["superadmin", "manager"] },
+  { href: "/doctors-page", label: "Shifokorlar", roles: ["superadmin", "manager", "assistant"] },
+  { href: "/users-page", label: "Foydalanuvchilar", roles: ["superadmin", "manager"] },
+  { href: "/audit-log", label: "Audit jurnali", roles: ["superadmin"] },
+  { href: "/settings", label: "Sozlamalar", roles: ["superadmin"] },
+];
+
+const ROLE_LABELS = {
+  superadmin: "bosh administrator",
+  manager: "menejer",
+  assistant: "yordamchi",
+};
+
+async function initPage({ allowedRoles = null } = {}) {
+  const user = await requireAuth();
+  if (!user) {
+    return null;
+  }
+
+  if (allowedRoles && !allowedRoles.includes(user.role)) {
+    window.location.href = "/dashboard";
+    return null;
+  }
+
+  const nav = document.getElementById("mainnav");
+  if (nav) {
+    nav.innerHTML = "";
+    const currentPath = window.location.pathname;
+    NAV_LINKS.filter((link) => link.roles.includes(user.role)).forEach((link) => {
+      const a = document.createElement("a");
+      a.href = link.href;
+      a.textContent = link.label;
+      if (link.href === currentPath) {
+        a.classList.add("active");
+      }
+      nav.appendChild(a);
+    });
+  }
+
+  const nameEl = document.getElementById("current-user-name");
+  if (nameEl) {
+    nameEl.textContent = `${user.full_name} (${ROLE_LABELS[user.role] || user.role})`;
+  }
+
+  const logoutBtn = document.getElementById("logout-btn");
+  if (logoutBtn) {
+    logoutBtn.addEventListener("click", () => logout());
+  }
+
+  return user;
+}
+
+function formatMoney(value) {
+  const n = Number(value);
+  if (Number.isNaN(n)) return value;
+  return n.toLocaleString("en-US");
+}
+
+function showError(container, message) {
+  container.innerHTML = "";
+  const box = document.createElement("div");
+  box.className = "error-box";
+  box.textContent = message;
+  container.appendChild(box);
+}
+
+function paginationLabel(data) {
+  return `${data.page}-sahifa, ${Math.max(data.pages, 1)} tadan (jami ${data.total})`;
+}

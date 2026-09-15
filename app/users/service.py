@@ -2,7 +2,7 @@ import uuid
 
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -93,6 +93,28 @@ async def _create_user(
     await db.commit()
     await db.refresh(user)
     return user
+
+
+async def list_users_by_role(
+    db: AsyncSession,
+    *,
+    role: UserRoleEnum,
+    page: int,
+    page_size: int,
+) -> tuple[list[User], int]:
+    base_stmt = select(User).where(User.role == role)
+
+    total = (
+        await db.execute(select(func.count()).select_from(base_stmt.subquery()))
+    ).scalar_one()
+
+    stmt = (
+        base_stmt.order_by(User.full_name, User.username)
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )
+    items = (await db.execute(stmt)).scalars().all()
+    return list(items), total
 
 
 async def create_manager(db: AsyncSession, actor: User, data: ManagerCreate) -> User:
