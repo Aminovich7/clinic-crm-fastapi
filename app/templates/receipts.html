@@ -121,6 +121,28 @@
 </div>
 
 <h2>So'nggi yozuvlar</h2>
+<div class="card">
+  <form class="inline-form" id="filter-form">
+    <div class="field">
+      <label for="filter_date_from">Dan</label>
+      <input type="date" id="filter_date_from">
+    </div>
+    <div class="field">
+      <label for="filter_date_to">Gacha</label>
+      <input type="date" id="filter_date_to">
+    </div>
+    <div class="field">
+      <label for="filter_doctor">Shifokor</label>
+      <select id="filter_doctor"></select>
+    </div>
+    <div class="field hidden" id="filter-creator-field">
+      <label for="filter_creator">Kim qo'shgan</label>
+      <select id="filter_creator"></select>
+    </div>
+    <button type="submit">Filtrlash</button>
+    <button type="button" class="secondary" id="filter-clear-btn">Tozalash</button>
+  </form>
+</div>
 <div class="table-wrap">
   <table>
     <thead id="recent-thead"></thead>

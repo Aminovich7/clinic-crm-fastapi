@@ -1,5 +1,5 @@
 (async function () {
-  const user = await initPage();
+  const user = await initPage({ allowedRoles: ["superadmin", "manager"] });
   if (!user) return;
 
   const dateFromInput = document.getElementById("date_from");

@@ -1112,3 +1112,164 @@ touched JS files re-checked with `node -c`; full Claude-in-Chrome
 click-through as the assistant test account covering nav, direct-URL
 redirect, and the doctor-column receipt creation above.
 
+---
+
+## 19. Session 10 — no Dashboard for assistants, per-doctor combined report
+
+Two requests: (1) assistants must not see "Boshqaruv paneli" (Dashboard)
+at all, and (2) managers/superadmin need a way to check one doctor's
+total earnings across consultations, surgeries, and rooms for a date
+range, as a Reports feature.
+
+**Dashboard hidden from assistants:**
+- [x] `app/static/js/nav.js`: removed `"assistant"` from the Dashboard
+  `NAV_LINKS` entry, and — this was the part that needed more than a
+  one-line change — replaced the hardcoded `window.location.href =
+  "/dashboard"` disallowed-role redirect with a new `ROLE_HOME` map
+  (`{superadmin: "/dashboard", manager: "/dashboard", assistant:
+  "/receipts"}`). Without this, an assistant landing on `/dashboard`
+  would have bounced back to `/dashboard` — an infinite redirect loop —
+  since `/dashboard` was itself about to become the page redirecting them
+  away. Every `allowedRoles`-gated page (`audit_log.js`, `settings.js`,
+  `reports.js`, now `dashboard.js`) uses this same map, so an assistant
+  hitting any admin-only page now lands on `/receipts`, not a loop.
+- [x] `app/static/js/dashboard.js`: `initPage()` now passes
+  `{ allowedRoles: ["superadmin", "manager"] }`.
+- [x] Verified in-browser as `asst1`: nav no longer shows "Boshqaruv
+  paneli", and (after the two known JS-caching hiccups below) the
+  assistant correctly lands on `/receipts`.
+  **Debugging note, not a code bug:** the first two verification passes
+  this session showed stale behavior (old nav still visible, a 404 from
+  a URL that no longer matched the updated JS) purely because the
+  browser had cached `nav.js`/`dashboard.js`/`reports.js` from earlier
+  in the conversation and `docker compose`'s `--reload` only affects the
+  Python process, not already-loaded browser JS. A hard reload
+  (`ctrl+shift+r`) in the test tab resolved both — worth remembering for
+  future sessions verifying JS changes in an already-open tab.
+
+**New "Shifokor bo'yicha" (by doctor) report tab:**
+- [x] `app/templates/reports.html`: added a fifth tab button
+  (`data-report="doctor"`) and a doctor `<select>` (populated from the
+  existing `GET /doctors/options`) shown only on that tab.
+- [x] `app/static/js/reports.js`: no new backend endpoint was needed —
+  `build_consultation_report`/`build_surgery_report`/`build_room_report`
+  already return a full per-doctor `doctor_shares` breakdown for the
+  date range (§16.1 confirmed this data already existed, just not
+  surfaced this way). `loadDoctorReport()` fetches all three section
+  reports for the selected range with `Promise.all`, picks out the
+  selected doctor's row from each one's `doctor_shares` /
+  `surgery_doctor_shares` / `room_doctor_shares` array by `doctor_id`,
+  and renders: four summary cards (per-section share + a combined
+  "Jami ulush" total), a three-bar chart, and a Bo'lim/Ulush/Yozuvlar
+  soni breakdown table — all reusing the existing `statCard`/`Chart`/
+  table-rendering helpers already in the file.
+  **"How much a doctor made" was read as their `doctor_share`** (their
+  cut, "shifokor ulushi" — the same figure the app calls this everywhere
+  else), not gross income tied to their records. Worth confirming this
+  matches intent if it turns out clinic-side income per doctor was
+  wanted instead.
+- [x] The Excel export button doesn't apply here (no backend endpoint
+  combines three report types into one file) — `exportBtn` is hidden via
+  `classList.toggle("hidden", ...)` whenever this tab is active, so
+  there's no dead/broken button on screen instead of silently doing
+  nothing.
+- [x] Verified end-to-end with real data: selected "Rashidova Dilnoza"
+  for a wide date range and got the correct combined figures
+  (47,500 so'm from one active consultation, 0 from surgeries/rooms she
+  has no active records in, matching a direct `curl` of
+  `/reports/consultations` for the same range).
+  **While verifying, ran into and diagnosed (not a bug in this
+  feature):** most of the consultation test data from earlier sessions
+  had been voided by an `actor_id` that isn't any of my own test
+  accounts — almost certainly you, testing the app yourself per the
+  terminal commands given last session. That's exactly what void is
+  for, and the report correctly excludes voided records; this was
+  confirmed via `GET /audit-logs?resource_type=consultation`, not
+  guessed.
+
+**Verification:** `pytest -q` 26/26 (no backend changes this session —
+both requests were achievable entirely in the frontend, reusing existing
+endpoints and data already returned by them); all touched JS files
+re-checked with `node -c`; full Claude-in-Chrome click-through covering
+the assistant's hidden Dashboard and the new doctor-report tab with real
+data cross-checked against a direct API call.
+
+---
+
+## 20. Session 11 — receipt columns, filters, and a confirmed non-issue
+
+Four requests: (1) show who added each receipt, (2) show a per-row
+clinic-profit column, manager/superadmin only, (3) add date/creator
+filters to Kvitansiyalar, (4) confirm managers can't delete doctors.
+
+**"Managers must not be able to delete doctors" — already true, no
+change made:**
+- [x] Checked both layers before touching anything: `app/doctors/router.py`'s
+  `DELETE /{doctor_id}` is `require_roles(SUPERADMIN)` only (a Phase 0
+  decision from the very first session, deliberately kept stricter than
+  the `mk/` deviations doc), and `app/static/js/doctors.js`'s `canDelete`
+  flag is `user.role === "superadmin"` — `canManage` (which includes
+  `manager`) only gates the Edit button, never Delete. Nothing to fix;
+  documented here since it was asked as a thing to verify, not assumed.
+
+**"Qo'shdi" (added-by) column — every role:**
+- [x] `app/static/js/receipts.js`: added a `creatorNameById` map, seeded
+  with `{[user.id]: user.full_name}` for every role (so an assistant,
+  who only ever sees their own records anyway, still resolves correctly
+  without needing any extra API access), and for `manager`/`superadmin`
+  additionally populated from `GET /users/assistants` (both roles) and
+  `GET /users/managers` (superadmin only — matches that endpoint's
+  existing role gate from §16/Phase 11, so a manager actor never calls
+  an endpoint it would get a `403` from). New "Qo'shdi" column added to
+  all three record-type tables, positioned right after "Shifokor".
+
+**"Klinika foydasi" (clinic profit) column — manager/superadmin only:**
+- [x] Same reasoning as the create-form preview restriction from Session
+  8: finance records never persist `clinic_profit` (§2 — "never persist
+  calculated fields"), so a `computeClinicProfit(kind, record)` helper
+  was added that mirrors `app/finance/calculations.py`'s formulas exactly
+  (consultation/surgery: `amount - round((amount-expense)*percent/100) -
+  expense`; room: `amount - round(amount*percent/100)`, no expense term).
+  `headersFor(kind)` splices "Klinika foydasi" into the header row only
+  when `canManage` is true, and `renderRow()` only renders the matching
+  `<td>` in that case — an assistant's row literally has one fewer `<td>`
+  than a manager's for the same record, not just a hidden/empty cell.
+  Verified against a real record (100,000 so'm, 50%, 5,000 expense):
+  computed 47,500, matching what `/reports/consultations` independently
+  reports as that doctor's `total_share` for the same record.
+
+**Filters in Kvitansiyalar (date range, doctor, "who added"):**
+- [x] Backend: `app/finance/service.py`'s `list_consultations`/
+  `list_surgeries`/`list_rooms` gained an optional `created_by_id`
+  keyword parameter (date-range and doctor filtering already existed
+  server-side, just weren't exposed in this page's UI yet — confirmed
+  by reading the functions before writing anything). `app/finance/router.py`'s
+  three `GET` list endpoints gained a matching `created_by_id: uuid.UUID
+  | None` query param, passed straight through. No role gate needed
+  here beyond what already exists — an assistant passing their own id
+  changes nothing (their query is already forced to
+  `created_by_id == actor.id` by `_apply_assistant_ownership`), and nothing
+  stops a manager/superadmin from filtering by any id since they already
+  see every record.
+- [x] Frontend: added a filter card to `receipts.html` (date-from,
+  date-to, doctor, "Kim qo'shgan") right above the recent-entries table,
+  wired in `receipts.js` to the same `GET` endpoints via query params,
+  plus a "Tozalash" (clear) button. The "Kim qo'shgan" field is hidden
+  entirely for assistants (`filter-creator-field.classList.add("hidden")`
+  when `!canManage`) since their list is already own-scope-only — showing
+  a filter that can only ever match "myself" would be clutter, not a
+  feature.
+- [x] Verified all three filters independently in-browser as superadmin:
+  filtering by a specific creator returned only that person's record;
+  filtering by a creator with zero records correctly returned an empty,
+  0-total list (not an error); a future-dated `date_from` correctly
+  excluded today's records. Also verified as the assistant test account
+  that "Kim qo'shgan" doesn't render at all, and their own date filter
+  still works against their own-scoped list.
+
+**Verification:** `pytest -q` 26/26; `node -c` on `receipts.js`; full
+Claude-in-Chrome click-through as both superadmin and the assistant test
+account, cross-checking the clinic-profit math against a real record and
+the creator filter against two different actors (one with records, one
+without).
+

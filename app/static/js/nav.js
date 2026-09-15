@@ -3,7 +3,7 @@
 // data-loading logic is set up.
 
 const NAV_LINKS = [
-  { href: "/dashboard", label: "Boshqaruv paneli", roles: ["superadmin", "manager", "assistant"] },
+  { href: "/dashboard", label: "Boshqaruv paneli", roles: ["superadmin", "manager"] },
   { href: "/receipts", label: "Kvitansiyalar", roles: ["superadmin", "manager", "assistant"] },
   { href: "/reports", label: "Hisobotlar", roles: ["superadmin", "manager"] },
   { href: "/doctors-page", label: "Shifokorlar", roles: ["superadmin", "manager", "assistant"] },
@@ -18,6 +18,16 @@ const ROLE_LABELS = {
   assistant: "yordamchi",
 };
 
+// Where a role lands when it hits a page it's not allowed to see.
+// Assistants have no dashboard, so "/dashboard" can't be the universal
+// fallback anymore — each role goes to the first page it's actually
+// allowed to use.
+const ROLE_HOME = {
+  superadmin: "/dashboard",
+  manager: "/dashboard",
+  assistant: "/receipts",
+};
+
 async function initPage({ allowedRoles = null } = {}) {
   const user = await requireAuth();
   if (!user) {
@@ -25,7 +35,7 @@ async function initPage({ allowedRoles = null } = {}) {
   }
 
   if (allowedRoles && !allowedRoles.includes(user.role)) {
-    window.location.href = "/dashboard";
+    window.location.href = ROLE_HOME[user.role] || "/receipts";
     return null;
   }
 

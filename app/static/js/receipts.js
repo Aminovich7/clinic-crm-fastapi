@@ -70,9 +70,56 @@
           select.appendChild(opt);
         });
       });
+      const filterDoctorSelect = document.getElementById("filter_doctor");
+      filterDoctorSelect.innerHTML = '<option value="">— barcha shifokorlar —</option>';
+      options.forEach((doc) => {
+        const opt = document.createElement("option");
+        opt.value = doc.id;
+        opt.textContent = doc.name;
+        filterDoctorSelect.appendChild(opt);
+      });
     } catch (err) {
       showError(errorContainer, err.detail || err.message || "Shifokorlar ro'yxatini yuklashda xatolik");
     }
+  }
+
+  // --- "Added by" data: used both for the recent-entries table's
+  // "Qo'shdi" column (every role) and the "Kim qo'shgan" filter
+  // (superadmin/manager only — an assistant's list is already forced to
+  // their own records, so the filter would be a no-op for them).
+  let creatorNameById = { [user.id]: user.full_name };
+
+  async function loadCreatorOptions() {
+    const filterCreatorField = document.getElementById("filter-creator-field");
+    if (!canManage) {
+      filterCreatorField.classList.add("hidden");
+      return;
+    }
+    filterCreatorField.classList.remove("hidden");
+
+    const people = [{ id: user.id, name: `${user.full_name} (siz)` }];
+    try {
+      if (user.role === "superadmin") {
+        const managers = await apiFetch("/users/managers?page_size=100");
+        managers.items.forEach((m) => {
+          if (m.id !== user.id) people.push({ id: m.id, name: m.full_name });
+        });
+      }
+      const assistants = await apiFetch("/users/assistants?page_size=100");
+      assistants.items.forEach((a) => people.push({ id: a.id, name: a.full_name }));
+    } catch (err) {
+      showError(errorContainer, err.detail || err.message || "Foydalanuvchilar ro'yxatini yuklashda xatolik");
+    }
+
+    creatorNameById = Object.fromEntries(people.map((p) => [p.id, p.name]));
+    const select = document.getElementById("filter_creator");
+    select.innerHTML = '<option value="">— hammasi —</option>';
+    people.forEach((p) => {
+      const opt = document.createElement("option");
+      opt.value = p.id;
+      opt.textContent = p.name;
+      select.appendChild(opt);
+    });
   }
 
   // --- Client-side preview math (mirrors app/finance/calculations.py) ---
@@ -306,11 +353,37 @@
     room: "/rooms",
   };
 
-  const HEADERS = {
-    consultation: ["Chek raqami", "Sana", "Turi", "Shifokor", "Summa", "Shifokor foizi", "Xarajat", "Holati", "Amallar"],
-    surgery: ["Chek raqami", "Sana", "Shifokor", "Summa", "Shifokor foizi", "Xarajat", "Holati", "Amallar"],
-    room: ["Chek raqami", "Sana", "Shifokor", "Summa", "Shifokor foizi", "Holati", "Amallar"],
+  // Base columns, before the role-conditional "Klinika foydasi" column
+  // (manager/superadmin only — mirrors the create-form preview's
+  // restriction, §Session 8) gets spliced in just before "Holati".
+  const BASE_HEADERS = {
+    consultation: ["Chek raqami", "Sana", "Turi", "Shifokor", "Qo'shdi", "Summa", "Shifokor foizi", "Xarajat", "Holati", "Amallar"],
+    surgery: ["Chek raqami", "Sana", "Shifokor", "Qo'shdi", "Summa", "Shifokor foizi", "Xarajat", "Holati", "Amallar"],
+    room: ["Chek raqami", "Sana", "Shifokor", "Qo'shdi", "Summa", "Shifokor foizi", "Holati", "Amallar"],
   };
+
+  function headersFor(kind) {
+    const headers = [...BASE_HEADERS[kind]];
+    if (canManage) {
+      headers.splice(headers.indexOf("Holati"), 0, "Klinika foydasi");
+    }
+    return headers;
+  }
+
+  // Mirrors app/finance/calculations.py exactly (never persisted server-
+  // side, so it has to be recomputed here the same way the create-form
+  // preview does it).
+  function computeClinicProfit(kind, record) {
+    const amount = Number(record.amount);
+    const percent = Number(record.doctor_percent);
+    if (kind === "room") {
+      const doctorShare = Math.round((amount * percent) / 100);
+      return amount - doctorShare;
+    }
+    const expense = Number(kind === "consultation" ? record.minus_beshming ?? 0 : record.surgery_expense);
+    const doctorShare = Math.round(((amount - expense) * percent) / 100);
+    return amount - doctorShare - expense;
+  }
 
   async function voidRecord(kind, id) {
     if (!confirm("Ushbu yozuvni bekor qilasizmi? Bu amalni qaytarib bo'lmaydi.")) return;
@@ -340,6 +413,8 @@
     const statusLabel = record.is_voided ? "Bekor qilingan" : "Faol";
     const typeLabel = record.type === "korik" ? "Ko'rik" : "Qayta ko'rik";
     const doctorLabel = record.doctor_id ? (doctorNameById[record.doctor_id] || "—") : "—";
+    const creatorLabel = creatorNameById[record.created_by_id] || "—";
+    const profitCell = canManage ? `<td>${formatMoney(computeClinicProfit(kind, record))}</td>` : "";
 
     if (kind === "consultation") {
       tr.innerHTML = `
@@ -347,9 +422,11 @@
         <td>${dateStr}</td>
         <td>${typeLabel}</td>
         <td>${doctorLabel}</td>
+        <td>${creatorLabel}</td>
         <td>${formatMoney(record.amount)}</td>
         <td>${formatMoney(record.doctor_percent)}%</td>
         <td>${formatMoney(record.minus_beshming ?? 0)}</td>
+        ${profitCell}
         <td>${statusLabel}</td>
         <td class="actions-cell">${editBtn}${voidBtn}</td>
       `;
@@ -358,9 +435,11 @@
         <td>${record.receipt_number}</td>
         <td>${dateStr}</td>
         <td>${doctorLabel}</td>
+        <td>${creatorLabel}</td>
         <td>${formatMoney(record.amount)}</td>
         <td>${formatMoney(record.doctor_percent)}%</td>
         <td>${formatMoney(record.surgery_expense)}</td>
+        ${profitCell}
         <td>${statusLabel}</td>
         <td class="actions-cell">${editBtn}${voidBtn}</td>
       `;
@@ -369,8 +448,10 @@
         <td>${record.receipt_number ?? "—"}</td>
         <td>${dateStr}</td>
         <td>${doctorLabel}</td>
+        <td>${creatorLabel}</td>
         <td>${formatMoney(record.amount)}</td>
         <td>${formatMoney(record.doctor_percent)}%</td>
+        ${profitCell}
         <td>${statusLabel}</td>
         <td class="actions-cell">${editBtn}${voidBtn}</td>
       `;
@@ -378,13 +459,38 @@
     return tr;
   }
 
+  // --- Filters ---
+  const filterDateFromInput = document.getElementById("filter_date_from");
+  const filterDateToInput = document.getElementById("filter_date_to");
+  const filterDoctorSelect = document.getElementById("filter_doctor");
+  const filterCreatorSelect = document.getElementById("filter_creator");
+
+  document.getElementById("filter-form").addEventListener("submit", (event) => {
+    event.preventDefault();
+    page = 1;
+    loadRecent();
+  });
+
+  document.getElementById("filter-clear-btn").addEventListener("click", () => {
+    filterDateFromInput.value = "";
+    filterDateToInput.value = "";
+    filterDoctorSelect.value = "";
+    if (filterCreatorSelect) filterCreatorSelect.value = "";
+    page = 1;
+    loadRecent();
+  });
+
   async function loadRecent() {
     clearMessages();
     recentTbody.innerHTML = "";
     pagination.innerHTML = "";
-    recentThead.innerHTML = `<tr>${HEADERS[activeTab].map((h) => `<th>${h}</th>`).join("")}</tr>`;
+    recentThead.innerHTML = `<tr>${headersFor(activeTab).map((h) => `<th>${h}</th>`).join("")}</tr>`;
 
     const params = new URLSearchParams({ page, page_size: pageSize });
+    if (filterDateFromInput.value) params.set("date_from", filterDateFromInput.value);
+    if (filterDateToInput.value) params.set("date_to", filterDateToInput.value);
+    if (filterDoctorSelect.value) params.set("doctor_id", filterDoctorSelect.value);
+    if (canManage && filterCreatorSelect.value) params.set("created_by_id", filterCreatorSelect.value);
     try {
       const data = await apiFetch(`${ENDPOINTS[activeTab]}?${params.toString()}`);
       lastLoadedItems = data.items;
@@ -414,6 +520,6 @@
     }
   }
 
-  await loadDoctorOptions();
+  await Promise.all([loadDoctorOptions(), loadCreatorOptions()]);
   loadRecent();
 })();

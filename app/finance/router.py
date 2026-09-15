@@ -1,3 +1,4 @@
+import uuid
 from datetime import date
 from typing import Literal
 
@@ -89,6 +90,7 @@ async def create_consultation_endpoint(
 async def list_consultations_endpoint(
     doctor_id: int | None = Query(default=None),
     type: ConsultationType | None = Query(default=None),
+    created_by_id: uuid.UUID | None = Query(default=None),
     date_from: date | None = Query(default=None),
     date_to: date | None = Query(default=None),
     page: int = Query(default=1, ge=1),
@@ -102,6 +104,7 @@ async def list_consultations_endpoint(
             actor=actor,
             doctor_id=doctor_id,
             type_=type,
+            created_by_id=created_by_id,
             date_from=date_from,
             date_to=date_to,
             page=page,
@@ -163,6 +166,7 @@ async def create_surgery_endpoint(
 @router.get("/surgeries", response_model=PaginatedResponse[SurgeryRead])
 async def list_surgeries_endpoint(
     doctor_id: int | None = Query(default=None),
+    created_by_id: uuid.UUID | None = Query(default=None),
     date_from: date | None = Query(default=None),
     date_to: date | None = Query(default=None),
     page: int = Query(default=1, ge=1),
@@ -175,6 +179,7 @@ async def list_surgeries_endpoint(
             db,
             actor=actor,
             doctor_id=doctor_id,
+            created_by_id=created_by_id,
             date_from=date_from,
             date_to=date_to,
             page=page,
@@ -236,6 +241,7 @@ async def create_room_endpoint(
 @router.get("/rooms", response_model=PaginatedResponse[RoomRead])
 async def list_rooms_endpoint(
     doctor_id: int | None = Query(default=None),
+    created_by_id: uuid.UUID | None = Query(default=None),
     date_from: date | None = Query(default=None),
     date_to: date | None = Query(default=None),
     page: int = Query(default=1, ge=1),
@@ -248,6 +254,7 @@ async def list_rooms_endpoint(
             db,
             actor=actor,
             doctor_id=doctor_id,
+            created_by_id=created_by_id,
             date_from=date_from,
             date_to=date_to,
             page=page,

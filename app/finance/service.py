@@ -172,6 +172,7 @@ async def list_consultations(
     actor: User,
     doctor_id: int | None,
     type_: ConsultationType | None,
+    created_by_id=None,
     date_from,
     date_to,
     page: int,
@@ -184,6 +185,8 @@ async def list_consultations(
         stmt = stmt.where(Consultation.doctor_id == doctor_id)
     if type_ is not None:
         stmt = stmt.where(Consultation.type == type_)
+    if created_by_id is not None:
+        stmt = stmt.where(Consultation.created_by_id == created_by_id)
 
     start, end = get_business_datetime_range(date_from, date_to)
     if start:
@@ -303,6 +306,7 @@ async def list_surgeries(
     *,
     actor: User,
     doctor_id: int | None,
+    created_by_id=None,
     date_from,
     date_to,
     page: int,
@@ -313,6 +317,8 @@ async def list_surgeries(
 
     if doctor_id is not None:
         stmt = stmt.where(Surgery.doctor_id == doctor_id)
+    if created_by_id is not None:
+        stmt = stmt.where(Surgery.created_by_id == created_by_id)
 
     start, end = get_business_datetime_range(date_from, date_to)
     if start:
@@ -428,6 +434,7 @@ async def list_rooms(
     *,
     actor: User,
     doctor_id: int | None,
+    created_by_id=None,
     date_from,
     date_to,
     page: int,
@@ -438,6 +445,8 @@ async def list_rooms(
 
     if doctor_id is not None:
         stmt = stmt.where(Room.doctor_id == doctor_id)
+    if created_by_id is not None:
+        stmt = stmt.where(Room.created_by_id == created_by_id)
 
     start, end = get_business_datetime_range(date_from, date_to)
     if start:
