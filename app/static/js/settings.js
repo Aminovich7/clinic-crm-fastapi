@@ -20,12 +20,14 @@
     successContainer.appendChild(box);
   }
 
+  attachMoneyInput(input);
+
   async function loadSettings() {
     clearMessages();
     try {
       const data = await apiFetch("/admin/settings/finance");
-      input.value = data.default_minus_beshming;
-      meta.textContent = `Oxirgi yangilanish: ${new Date(data.updated_at).toLocaleString()}`;
+      input.value = formatMoneyInputValue(data.default_minus_beshming);
+      meta.textContent = `Oxirgi yangilanish: ${formatDateTime(data.updated_at)}`;
     } catch (err) {
       showError(errorContainer, err.detail || err.message || "Sozlamalarni yuklashda xatolik");
     }
@@ -37,10 +39,10 @@
     try {
       const data = await apiFetch("/admin/settings/finance", {
         method: "PATCH",
-        body: { default_minus_beshming: input.value },
+        body: { default_minus_beshming: moneyInputValue(input) },
       });
-      input.value = data.default_minus_beshming;
-      meta.textContent = `Oxirgi yangilanish: ${new Date(data.updated_at).toLocaleString()}`;
+      input.value = formatMoneyInputValue(data.default_minus_beshming);
+      meta.textContent = `Oxirgi yangilanish: ${formatDateTime(data.updated_at)}`;
       showSuccess("Sozlamalar yangilandi");
     } catch (err) {
       showError(errorContainer, err.detail || err.message || "Sozlamalarni yangilashda xatolik");

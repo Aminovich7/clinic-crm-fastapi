@@ -15,6 +15,8 @@
   const roleLabels = { doctor: "Shifokor", nurse: "Hamshira", other: "Boshqa" };
   const typeLabels = { full: "To'liq oylik", avans: "Avans" };
 
+  attachMoneyInput(document.getElementById("pay_amount"));
+
   let staffNameById = {};
   let historyPage = 1;
   const historyPageSize = 20;
@@ -101,7 +103,7 @@
       payment_type: document.getElementById("pay_type").value,
       period_start: document.getElementById("period_start").value,
       period_end: document.getElementById("period_end").value,
-      amount: document.getElementById("pay_amount").value,
+      amount: moneyInputValue(document.getElementById("pay_amount")),
     };
 
     try {
@@ -148,10 +150,10 @@
       data.items.forEach((payment) => {
         const tr = document.createElement("tr");
         tr.innerHTML = `
-          <td>${payment.paid_at.slice(0, 10)}</td>
+          <td>${formatDateTime(payment.paid_at)}</td>
           <td>${staffNameById[payment.staff_id] || "—"}</td>
           <td>${typeLabels[payment.payment_type] || payment.payment_type}</td>
-          <td>${payment.period_start} — ${payment.period_end}</td>
+          <td>${formatDate(payment.period_start)} — ${formatDate(payment.period_end)}</td>
           <td>${formatMoney(payment.amount)}</td>
           <td class="actions-cell"><button class="danger void-btn" data-id="${payment.id}">Bekor qilish</button></td>
         `;

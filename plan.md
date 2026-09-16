@@ -1739,3 +1739,92 @@ before touching anything:
   now lists and correctly reports on all 4 doctors; Navbatchilik's picker
   now lists all 4 doctors plus both nurses.
 - `pytest -q`: still 60/60.
+
+---
+
+## 22. Session 13 — Uzbek date display format, comma-grouped money inputs
+
+Two UI-wide preference changes, applied everywhere they're relevant rather
+than only where first noticed:
+
+- **Date/time display**: every place a date or timestamp is rendered as
+  text (table cells, "last updated" labels, audit log) now reads
+  `DD-MonthName-YYYY` for a pure calendar date or `DD-MonthName-YYYY HH:mm`
+  for a full timestamp, using Uzbek month names (`Yanvar` … `Dekabr`),
+  e.g. `16-Sentabr-2026 23:37` — replacing every prior
+  `new Date(...).toLocaleString()` / `.slice(0, 10)` call, which rendered
+  in the browser's locale format (`9/16/2026, 11:37:00 PM`).
+  - New shared helpers in `app/static/js/nav.js` (loaded on every page via
+    `base.html`, next to `formatMoney`): `formatDate(value)` and
+    `formatDateTime(value)`.
+  - `formatDate` reads the `YYYY-MM-DD` digits directly out of the string
+    instead of constructing a `Date` and reading local components —
+    deliberately, because a pure date value (`DutyEntry.date`,
+    `SalaryPayment.period_start`/`period_end`) has no time-of-day or
+    timezone, and going through `Date()`'s UTC-to-local conversion could
+    shift it onto the wrong calendar day for a viewer outside the
+    clinic's timezone. `formatDateTime` *does* use `Date()`'s local
+    conversion (correctly, since a full timestamp's wall-clock meaning is
+    inherently timezone-relative), reading both the date and time parts
+    from the same conversion so they never disagree with each other.
+  - **Native `<input type="date">` / `type="datetime-local">` pickers were
+    deliberately left untouched** — their on-screen chrome is controlled
+    by the OS/browser locale, not by this app's JS, and replacing them
+    with a custom-formatted text picker was out of scope for what was
+    asked (a *display* format change, not a new date-entry widget).
+  - Updated: `audit_log.js` (created_at), `settings.js` (updated_at),
+    `receipts.js` (the shared `dateStr` used by all three record types'
+    table rows), `oyliklar.js` (paid_at, period_start/period_end),
+    `dorixona.js` (entry date), `harajatlar.js` (expense date),
+    `navbatchilik.js` (entry date).
+- **Comma-grouped money inputs**: every money-amount `<input>` across the
+  app now shows thousands separators live while typing (`1000000` becomes
+  `1,000,000`), not just in read-only display (which already used
+  `formatMoney`/`toLocaleString`). Requested for the receipts (Ko'rik/
+  Operatsiya/Xona) amount fields specifically; applied consistently to
+  every other money-amount input in the app for the same reason the user
+  gave ("easy to read for a user inputting money UZS amount") —
+  `fixed_salary` (Ishchilar), `amount` (Navbatchilik, Boshqa harajatlar),
+  `pay_amount` (Oyliklar), `medicine_cost`/`amount_paid` (Dorixona),
+  `default_minus_beshming` (Sozlamalar).
+  - Native `<input type="number">` cannot contain commas — every one of
+    these fields changed to `<input type="text" inputmode="numeric">`
+    (`inputmode="numeric"` still brings up the numeric keyboard on
+    mobile). Server-side `ge=0` validation is unaffected; client-side
+    `min`/`step` attributes were dropped since they don't apply to
+    `type="text"` and the input is now digit-only by construction anyway.
+  - New shared helpers in `nav.js`: `formatMoneyInputValue(raw)` (digits
+    → comma-grouped string), `attachMoneyInput(input)` (wires an `input`
+    event listener that reformats on every keystroke, preserving cursor
+    position relative to the end of the value), `moneyInputValue(input)`
+    (strips commas back out — this is what every payload-building and
+    live-preview-calculation call site must read instead of `input.value`
+    directly, or it would try to parse `"1,000,000"` as a number and get
+    `1`, silently corrupting both the live preview and the submitted
+    amount).
+  - `receipts.js` needed the most care: its three live-preview functions
+    (`updateConsultationPreview`/`Surgery`/`Room`) and all three
+    submit-handler payloads were reading these fields with a raw
+    `.value`/`parseFloat(.value)` — every one of those was switched to
+    `moneyInputValue(...)`, and `enterEditMode`'s pre-fill of an existing
+    record's amount into the form now runs it through
+    `formatMoneyInputValue()` so editing a record shows the comma-grouped
+    value immediately rather than reformatting only after the first
+    keystroke.
+- Verified live (not curl) on two different accounts already logged into
+  the app: as `Test Assistant`, typed `1000000` into a real consultation's
+  Summa field (confirmed live comma formatting), submitted it, and the
+  resulting table row showed `16-Sentabr-2026 23:49` and `1,000,000` —
+  both formats working end to end, amount correctly parsed server-side
+  (no 422). As `Super Administrator`, confirmed Oyliklar's real payment
+  history (pre-existing data, not test data from this session) already
+  displays `16-Sentabr-2026 23:24` and `01-Sentabr-2026 — 16-Sentabr-2026`,
+  and typed into the Summa field there to confirm the same comma
+  formatting without submitting (to avoid touching that account's real
+  data).
+- `node --check` on every touched `.js` file (no Node available inside
+  the app container, run from the host instead): all pass.
+- `pytest -q`: still 60/60 (this session touched only templates and
+  static JS, no backend code).
+- The test consultation created during verification (`Test Assistant`,
+  receipt `99001`) was voided via the API afterward.

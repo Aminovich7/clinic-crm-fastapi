@@ -12,6 +12,8 @@
   const dateToInput = document.getElementById("date_to");
   const searchInput = document.getElementById("search");
 
+  attachMoneyInput(document.getElementById("amount"));
+
   let page = 1;
   const pageSize = 20;
   let searchTerm = "";
@@ -61,7 +63,7 @@
 
     const payload = {
       title: document.getElementById("title").value,
-      amount: document.getElementById("amount").value,
+      amount: moneyInputValue(document.getElementById("amount")),
       date: document.getElementById("date").value || null,
     };
 
@@ -102,7 +104,7 @@
       data.items.forEach((expense) => {
         const tr = document.createElement("tr");
         tr.innerHTML = `
-          <td>${expense.date.slice(0, 10)}</td>
+          <td>${formatDate(expense.date)}</td>
           <td>${expense.title}</td>
           <td>${formatMoney(expense.amount)}</td>
           <td class="actions-cell"><button class="danger void-btn" data-id="${expense.id}">Bekor qilish</button></td>

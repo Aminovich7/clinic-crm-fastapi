@@ -27,6 +27,7 @@
   let statusFilter = "";
 
   addBtn.classList.remove("hidden");
+  attachMoneyInput(document.getElementById("fixed_salary"));
 
   function clearMessages() {
     errorContainer.innerHTML = "";
@@ -60,7 +61,7 @@
     document.getElementById("last_name").value = staff ? staff.last_name : "";
     roleSelect.value = staff ? staff.role : "doctor";
     document.getElementById("specialty").value = staff && staff.specialty ? staff.specialty : "";
-    document.getElementById("fixed_salary").value = staff && staff.fixed_salary != null ? staff.fixed_salary : "";
+    document.getElementById("fixed_salary").value = staff && staff.fixed_salary != null ? formatMoneyInputValue(staff.fixed_salary) : "";
     document.getElementById("hire_date").value = staff && staff.hire_date ? staff.hire_date : "";
     formTitle.textContent = staff ? "Ishchini tahrirlash" : "Ishchi qo'shish";
     updateRoleFields();
@@ -81,7 +82,7 @@
 
     const id = document.getElementById("staff-id").value;
     const role = roleSelect.value;
-    const fixedSalaryValue = document.getElementById("fixed_salary").value;
+    const fixedSalaryValue = moneyInputValue(document.getElementById("fixed_salary"));
 
     const payload = {
       first_name: document.getElementById("first_name").value,

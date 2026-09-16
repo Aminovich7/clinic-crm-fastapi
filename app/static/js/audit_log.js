@@ -29,7 +29,7 @@
       data.items.forEach((log) => {
         const tr = document.createElement("tr");
         tr.innerHTML = `
-          <td>${new Date(log.created_at).toLocaleString()}</td>
+          <td>${formatDateTime(log.created_at)}</td>
           <td>${log.actor_id ?? "tizim"}</td>
           <td>${log.action}</td>
           <td>${log.resource_type}</td>

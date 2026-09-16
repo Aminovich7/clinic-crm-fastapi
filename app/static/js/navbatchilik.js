@@ -10,6 +10,8 @@
   const staffSelect = document.getElementById("staff");
   const dutyForm = document.getElementById("duty-form");
 
+  attachMoneyInput(document.getElementById("amount"));
+
   let page = 1;
   const pageSize = 20;
   let staffFilter = "";
@@ -55,7 +57,7 @@
     const payload = {
       staff_id: Number(document.getElementById("staff").value),
       date: document.getElementById("date").value || null,
-      amount: document.getElementById("amount").value,
+      amount: moneyInputValue(document.getElementById("amount")),
     };
 
     try {
@@ -96,7 +98,7 @@
       data.items.forEach((entry) => {
         const tr = document.createElement("tr");
         tr.innerHTML = `
-          <td>${entry.date}</td>
+          <td>${formatDate(entry.date)}</td>
           <td>${staffNameById[entry.staff_id] || "—"}</td>
           <td>${formatMoney(entry.amount)}</td>
           <td class="actions-cell"><button class="danger void-btn" data-id="${entry.id}">Bekor qilish</button></td>

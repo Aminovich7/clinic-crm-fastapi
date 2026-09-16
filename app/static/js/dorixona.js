@@ -11,6 +11,9 @@
   const dateFromInput = document.getElementById("date_from");
   const dateToInput = document.getElementById("date_to");
 
+  attachMoneyInput(document.getElementById("medicine_cost"));
+  attachMoneyInput(document.getElementById("amount_paid"));
+
   let page = 1;
   const pageSize = 20;
 
@@ -63,8 +66,8 @@
 
     const payload = {
       date: document.getElementById("date").value || null,
-      medicine_cost: document.getElementById("medicine_cost").value || null,
-      amount_paid: document.getElementById("amount_paid").value || null,
+      medicine_cost: moneyInputValue(document.getElementById("medicine_cost")) || null,
+      amount_paid: moneyInputValue(document.getElementById("amount_paid")) || null,
     };
 
     try {
@@ -104,7 +107,7 @@
       data.items.forEach((entry) => {
         const tr = document.createElement("tr");
         tr.innerHTML = `
-          <td>${entry.date.slice(0, 10)}</td>
+          <td>${formatDate(entry.date)}</td>
           <td>${entry.medicine_cost != null ? formatMoney(entry.medicine_cost) : "—"}</td>
           <td>${entry.amount_paid != null ? formatMoney(entry.amount_paid) : "—"}</td>
           <td class="actions-cell"><button class="danger void-btn" data-id="${entry.id}">Bekor qilish</button></td>

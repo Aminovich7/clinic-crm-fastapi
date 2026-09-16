@@ -130,9 +130,9 @@
 
   function updateConsultationPreview() {
     if (!showPreview) return;
-    const amount = parseFloat(document.getElementById("c_amount").value) || 0;
+    const amount = parseFloat(moneyInputValue(document.getElementById("c_amount"))) || 0;
     const percent = parseFloat(document.getElementById("c_doctor_percent").value) || 0;
-    const minusInput = document.getElementById("c_minus_beshming").value;
+    const minusInput = moneyInputValue(document.getElementById("c_minus_beshming"));
     const usesDefault = minusInput === "";
     const minus = usesDefault ? 0 : parseFloat(minusInput);
     const doctorShare = round2((amount - minus) * percent / 100);
@@ -146,9 +146,9 @@
 
   function updateSurgeryPreview() {
     if (!showPreview) return;
-    const amount = parseFloat(document.getElementById("s_amount").value) || 0;
+    const amount = parseFloat(moneyInputValue(document.getElementById("s_amount"))) || 0;
     const percent = parseFloat(document.getElementById("s_doctor_percent").value) || 0;
-    const expense = parseFloat(document.getElementById("s_surgery_expense").value) || 0;
+    const expense = parseFloat(moneyInputValue(document.getElementById("s_surgery_expense"))) || 0;
     const doctorShare = round2((amount - expense) * percent / 100);
     const clinicProfit = round2(amount - doctorShare - expense);
     document.getElementById("s_preview").textContent =
@@ -157,13 +157,20 @@
 
   function updateRoomPreview() {
     if (!showPreview) return;
-    const amount = parseFloat(document.getElementById("r_amount").value) || 0;
+    const amount = parseFloat(moneyInputValue(document.getElementById("r_amount"))) || 0;
     const percent = parseFloat(document.getElementById("r_doctor_percent").value) || 0;
     const doctorShare = round2(amount * percent / 100);
     const clinicProfit = round2(amount - doctorShare);
     document.getElementById("r_preview").textContent =
       `Taxminiy hisob — shifokor ulushi: ${formatMoney(doctorShare)}, klinika foydasi: ${formatMoney(clinicProfit)}`;
   }
+
+  // Comma-format every money-amount field as the user types, regardless
+  // of role — this is independent of the preview (assistants don't see
+  // the preview but still type amounts).
+  ["c_amount", "c_minus_beshming", "s_amount", "s_surgery_expense", "r_amount"].forEach((id) =>
+    attachMoneyInput(document.getElementById(id))
+  );
 
   if (showPreview) {
     ["c_amount", "c_doctor_percent", "c_minus_beshming"].forEach((id) =>
@@ -206,9 +213,9 @@
       document.getElementById("c_receipt_number").value = record.receipt_number;
       document.getElementById("c_date").value = toLocalInputValue(record.date);
       document.getElementById("c_doctor").value = record.doctor_id ?? "";
-      document.getElementById("c_amount").value = record.amount;
+      document.getElementById("c_amount").value = formatMoneyInputValue(record.amount);
       document.getElementById("c_doctor_percent").value = record.doctor_percent;
-      document.getElementById("c_minus_beshming").value = record.minus_beshming ?? 0;
+      document.getElementById("c_minus_beshming").value = formatMoneyInputValue(record.minus_beshming ?? 0);
       document.getElementById("c_form_title").textContent = `Ko'rikni tahrirlash — chek #${record.receipt_number}`;
       document.getElementById("c_submit_btn").textContent = "Saqlash";
       document.getElementById("c_cancel_btn").classList.remove("hidden");
@@ -218,8 +225,8 @@
       document.getElementById("s_receipt_number").value = record.receipt_number;
       document.getElementById("s_date").value = toLocalInputValue(record.date);
       document.getElementById("s_doctor").value = record.doctor_id ?? "";
-      document.getElementById("s_amount").value = record.amount;
-      document.getElementById("s_surgery_expense").value = record.surgery_expense;
+      document.getElementById("s_amount").value = formatMoneyInputValue(record.amount);
+      document.getElementById("s_surgery_expense").value = formatMoneyInputValue(record.surgery_expense);
       document.getElementById("s_doctor_percent").value = record.doctor_percent;
       document.getElementById("s_form_title").textContent = `Operatsiyani tahrirlash — chek #${record.receipt_number}`;
       document.getElementById("s_submit_btn").textContent = "Saqlash";
@@ -230,7 +237,7 @@
       document.getElementById("r_receipt_number").value = record.receipt_number ?? "";
       document.getElementById("r_date").value = toLocalInputValue(record.date);
       document.getElementById("r_doctor").value = record.doctor_id ?? "";
-      document.getElementById("r_amount").value = record.amount;
+      document.getElementById("r_amount").value = formatMoneyInputValue(record.amount);
       document.getElementById("r_doctor_percent").value = record.doctor_percent;
       document.getElementById("r_form_title").textContent = `Xona yozuvini tahrirlash — #${record.receipt_number ?? record.id}`;
       document.getElementById("r_submit_btn").textContent = "Saqlash";
@@ -266,13 +273,13 @@
     event.preventDefault();
     clearMessages();
     const id = editingId.consultation;
-    const minusInput = document.getElementById("c_minus_beshming").value;
+    const minusInput = moneyInputValue(document.getElementById("c_minus_beshming"));
     const payload = {
       type: document.getElementById("c_type").value,
       receipt_number: Number(document.getElementById("c_receipt_number").value),
       date: toIsoOrUndefined(document.getElementById("c_date").value),
       doctor_id: document.getElementById("c_doctor").value || null,
-      amount: document.getElementById("c_amount").value,
+      amount: moneyInputValue(document.getElementById("c_amount")),
       doctor_percent: document.getElementById("c_doctor_percent").value,
       // On create, blank means "apply the clinic's dynamic default" (send
       // null, per §4). On edit, blank means "clear it to zero for this
@@ -302,8 +309,8 @@
       receipt_number: Number(document.getElementById("s_receipt_number").value),
       date: toIsoOrUndefined(document.getElementById("s_date").value),
       doctor_id: document.getElementById("s_doctor").value || null,
-      amount: document.getElementById("s_amount").value,
-      surgery_expense: document.getElementById("s_surgery_expense").value,
+      amount: moneyInputValue(document.getElementById("s_amount")),
+      surgery_expense: moneyInputValue(document.getElementById("s_surgery_expense")),
       doctor_percent: document.getElementById("s_doctor_percent").value,
     };
     try {
@@ -329,7 +336,7 @@
       receipt_number: receiptInput ? Number(receiptInput) : null,
       date: toIsoOrUndefined(document.getElementById("r_date").value),
       doctor_id: document.getElementById("r_doctor").value || null,
-      amount: document.getElementById("r_amount").value,
+      amount: moneyInputValue(document.getElementById("r_amount")),
       doctor_percent: document.getElementById("r_doctor_percent").value,
     };
     try {
@@ -401,7 +408,7 @@
     const tr = document.createElement("tr");
     if (record.is_voided) tr.classList.add("voided");
 
-    const dateStr = new Date(record.date).toLocaleString();
+    const dateStr = formatDateTime(record.date);
     const editBtn =
       canManage && !record.is_voided
         ? `<button class="secondary edit-record-btn" data-kind="${kind}" data-id="${record.id}">Tahrirlash</button>`
