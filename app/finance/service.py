@@ -7,7 +7,6 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.service import record_audit_event
-from app.doctors.models import Doctor
 from app.finance.models import Consultation, ConsultationType, Room, Surgery, SystemSetting
 from app.finance.reports import get_business_datetime_range
 from app.finance.schemas import (
@@ -19,6 +18,7 @@ from app.finance.schemas import (
     SurgeryCreate,
     SurgeryUpdate,
 )
+from app.staff.models import Staff, StaffRoleEnum
 from app.users.models import User, UserRoleEnum
 
 CLINIC_TZ = ZoneInfo("Asia/Tashkent")
@@ -34,8 +34,8 @@ SETTINGS_ROW_ID = 1
 async def _require_doctor(db: AsyncSession, doctor_id: int | None) -> None:
     if doctor_id is None:
         return
-    doctor = await db.get(Doctor, doctor_id)
-    if doctor is None:
+    staff = await db.get(Staff, doctor_id)
+    if staff is None or staff.role != StaffRoleEnum.DOCTOR:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Doctor not found",

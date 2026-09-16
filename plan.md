@@ -122,7 +122,14 @@ tests/
 
   | Action | Superadmin | Manager | Assistant |
   |---|---|---|---|
-  | View/create/update/delete doctors | Y | Y (delete: confirm in Phase 0) | View only |
+  | View/create/update staff (Ishchilar — doctors/nurses/others) | Y | Y | N |
+  | Delete staff | Y (blocked 409 if financial/payroll history exists) | N | N |
+  | Activate/deactivate staff | Y | Y | N |
+  | Doctor-name dropdown for receipt entry (`/staff/options?role=doctor`) | Y | Y | Y (forced to doctors only, server-side) |
+  | Navbatchilik (duty entries): view/create/update/void | Y | Y | N |
+  | Oyliklar (salary payments, balance, lifetime summary) | Y | Y | N |
+  | Dorixona (pharmacy ledger) | Y | Y | N |
+  | Boshqa harajatlar (expenses) | Y | Y | N |
   | Create consultation/surgery/room | Y | Y | Y |
   | View own finance records | Y | Y | Y |
   | View all finance records | Y | Y | N (own only, via `created_by_id == actor.id`) |
@@ -138,6 +145,9 @@ tests/
   (Last two rows added in §16 — they were previously governed only by
   `require_roles(...)` in `users/router.py` with no table row describing
   them, which is why the frontend gap went unnoticed for two sessions.)
+
+  (Staff/Navbatchilik/Oyliklar/Dorixona/Boshqa harajatlar rows added in
+  §21, which also documents the `doctors` → `staff` table merge.)
 
 - **Never persist calculated fields.** `doctor_share`/`clinic_profit`/`expense` are always derived at read time by calling the same `calculations.py` functions used everywhere else — never stored as columns, never recomputed with a second formula anywhere (e.g. in the XLSX export or the total report).
 - **Total report composition:** `build_total_report()` must call `build_consultation_report()`, `build_surgery_report()`, `build_room_report()` and sum their already-computed totals. It must never independently re-query/re-sum the three tables — that would create a second, divergable source of truth for the same math.
@@ -1273,3 +1283,307 @@ account, cross-checking the clinic-profit math against a real record and
 the creator filter against two different actors (one with records, one
 without).
 
+---
+
+## 21. Session 12 — Ishchilar, Navbatchilik, Oyliklar, Dorixona, Boshqa harajatlar
+
+Five new features requested from an old Excel workbook the clinic used
+manually (`DEJUR_BERILGANPUL_APTEKA.xlsx` — duty-overtime pay and a
+pharmacy running account), reverse-engineered for its logic and then
+redesigned to this project's conventions rather than ported literally:
+**Ishchilar** (unified staff registry replacing `doctors`), **Navbatchilik**
+(duty-overtime entitlement ledger), **Oyliklar** (salary/payroll, with new
+computed-earnings logic the spreadsheet never had), **Dorixona** (pharmacy
+running ledger), and **Boshqa harajatlar** (other expenses — no spreadsheet
+analog). All five are manager/superadmin only, with one deliberate carve-out
+(the doctor-name dropdown for receipt entry stays open to assistants).
+
+### 21.1 `doctors` → `staff` merge
+
+- **Migration** `alembic/versions/7f1a9c2d4e6b_merge_doctors_into_staff.py`:
+  `op.rename_table('doctors', 'staff')` (preserves every PK value and the
+  sequence, so existing `doctor_id` FK values on `consultations`/
+  `surgeries`/`rooms` keep pointing at the same integers with zero data
+  loss). Adds `role` (`staff_role` enum: `doctor`/`nurse`/`other` —
+  deliberately no `sanitarka`/orderly role, exactly these three), backfilled
+  to `'doctor'` via a `server_default` that's then dropped (same discipline
+  as `minus_beshming`'s dynamic-default pattern); `fixed_salary`
+  (`Numeric(12,0)`, nullable, only for nurse/other — enforced by DB check
+  constraint `ck_staff_fixed_salary_doctor_null` *and* a Pydantic
+  `model_validator`); `status` (`staff_status` enum: `active`/`inactive`,
+  mirroring `User`'s `APPROVED`/`BLOCKED` pattern exactly, including reusing
+  `set_user_status`'s shape for `activate_staff`/`deactivate_staff`);
+  `hire_date` (nullable `Date`, used only as the lifetime-earnings
+  proration start for nurse/other staff — falls back to
+  `created_at.date()` if unset). Makes `specialty` nullable (was `NOT
+  NULL`, now only required for `role=doctor`). Drops and recreates the
+  three `doctor_id` FK constraints on `consultations`/`surgeries`/`rooms`
+  to point at `staff.id` instead of `doctors.id`, same `ondelete="SET
+  NULL"`, same column name (`doctor_id` was deliberately **not** renamed
+  to `staff_id` — a cosmetic rename would have touched ~10 sessions of
+  shipped schemas/JS/tests for no functional gain). **Gotcha hit and
+  fixed while writing this migration:** `op.add_column` with a bare
+  `sa.Enum(...)` does **not** implicitly create the Postgres enum type the
+  way `op.create_table` does — the type must be created explicitly first
+  via `sa.Enum(...).create(op.get_bind(), checkfirst=True)`, then referenced
+  with `create_type=False` in the column definition, or `ALTER TABLE ...
+  ADD COLUMN` fails with `UndefinedObject: type "staff_role" does not
+  exist`.
+- **`app/doctors/` deleted, replaced by `app/staff/`** (`models.py` /
+  `schemas.py` / `service.py` / `router.py`), same layering. `Staff`
+  model, `StaffRoleEnum`, `StaffStatusEnum` in `models.py`.
+  `StaffCreate`/`StaffUpdate` carry a `model_validator(mode="after")`
+  enforcing `role=doctor` ⇒ `specialty` required + `fixed_salary` must be
+  `None`; the update path re-validates the **merged** final state in the
+  service layer (same rule as the expense-vs-amount check), not just the
+  changed field.
+- **`GET /staff/options`** replaces `/doctors/options`, registered before
+  `/staff/{staff_id}` (same path-ordering rule as before). Takes an
+  optional `role` query param; **if the actor is an assistant, `role` is
+  force-set to `doctor` server-side regardless of what was requested** —
+  confirmed with a live `curl` as a real assistant account passing
+  `?role=nurse` and getting back doctors only. This is the one place
+  non-manager/superadmin roles touch the staff domain at all.
+- **Staff deletion**: `DELETE /staff/{id}` stays `SUPERADMIN`-only (same
+  as before) but now checks `_staff_has_financial_history()` first — an
+  `EXISTS`-style check against `Consultation.doctor_id`,
+  `Surgery.doctor_id`, `Room.doctor_id`, `DutyEntry.staff_id`,
+  `SalaryPayment.staff_id` (voided rows count too — even voided history
+  is worth protecting). Any hit → `409 Conflict`, telling the caller to
+  deactivate instead. Verified live: a nurse with a duty entry attached
+  correctly 409s on delete, then deactivates fine, and disappears from
+  `/staff/options` once inactive without losing any of her history.
+- **Ripple fixes**: `app/finance/service.py`'s `_require_doctor()` now
+  checks `staff.role == StaffRoleEnum.DOCTOR` (not just existence) — this
+  closes a gap that existed nowhere before, since attaching a non-doctor
+  to a consultation/surgery/room was never possible when `Doctor` was its
+  own table; verified live that attaching a nurse's id to a consultation
+  now correctly 404s. `app/finance/reports.py`'s `_load_doctor_map()`
+  queries `Staff` instead of `Doctor`. `app/finance/models.py`'s three
+  `doctor_id` `ForeignKey("doctors.id", ...)` declarations updated to
+  `ForeignKey("staff.id", ...)` — **missing this on the first pass broke
+  `Base.metadata.create_all()` in tests** with `NoReferencedTableError:
+  ...could not find table 'doctors'`, since the ORM model and the Alembic
+  migration are two independent sources of truth for the schema and both
+  must agree. `app/static/js/receipts.js`'s doctor dropdown now calls
+  `/staff/options?role=doctor`.
+- **Deliberate regression, confirmed with the user**: assistants no
+  longer have a browsable "Shifokorlar" list page (the old `GET /doctors`
+  was open to all three roles) — Ishchilar (including doctor details) is
+  now manager/superadmin only. Assistants keep only the name dropdown.
+- **`app/db/all_models.py`** updated to import `Staff` (from
+  `app.staff.models`) plus the four new tables below.
+
+### 21.2 Navbatchilik (`app/duty/`) — duty-overtime entitlement
+
+- Table `duty_entries` (`TimestampMixin` + `VoidableMixin`, void-not-delete
+  like every other financial ledger here): `staff_id` (FK `staff.id`,
+  `SET NULL`), `date` (plain `Date`, not `DateTime` — there's no
+  time-of-day component to guard against truncation for, so filtering is
+  plain inclusive `>=`/`<=`, not the exclusive-upper-bound trick §2
+  documents for `DateTime` business-date columns), `amount`
+  (`Numeric(12,0)`), `created_by_id`. **No uniqueness constraint on
+  `(staff_id, date)`** — confirmed with the user that a manager can log
+  two separate overtime stints for the same person on the same day; the
+  daily total is just the sum.
+- An entry is an entitlement record only, never itself a payment — actual
+  disbursement is recorded separately in Oyliklar.
+- `POST/GET/PATCH /duty-entries`, `POST /duty-entries/{id}/void` —
+  manager/superadmin only, no assistant access at all (unlike finance
+  records, which assistants can create).
+
+### 21.3 Oyliklar (`app/salary/`) — salary/payroll
+
+This is the most complex new logic in the codebase — formulas documented
+here to the same precision §2 uses for the money math, so they never need
+re-deriving.
+
+- Table `salary_payments` (`TimestampMixin` + `VoidableMixin`): `staff_id`,
+  `paid_at` (`DateTime(timezone=True)` — when the payment was actually
+  recorded/disbursed), `period_start`/`period_end` (`Date` — the pay
+  period this payment is meant to cover), `payment_type`
+  (`salary_payment_type` enum: `full`/`avans`), `amount` (`Numeric(12,0)`
+  — **always manager-free-typed, confirmed with the user, never
+  system-calculated or locked for either payment type** — the UI shows
+  computed earned/paid/remaining as reference only).
+- **Earned amount** (`compute_earned_amount`, `app/salary/service.py`),
+  over `[date_from, date_to]` inclusive:
+  - **Doctor:** `Σ doctor_share` across every non-voided
+    Consultation/Surgery/Room in range (reusing
+    `consultation_totals`/`surgery_totals`/`room_totals` from
+    `app/finance/calculations.py` completely unmodified — never a second
+    formula) **plus** `Σ DutyEntry.amount` for that staff in the same
+    range. **Confirmed explicitly with the user: Navbatchilik earnings
+    are added straight onto commission earnings as one combined "earned"
+    figure, not tracked as a separate line.**
+  - **Nurse/Other:** `prorate_fixed_salary(fixed_salary, date_from,
+    date_to)` (below) **plus** the same duty-entry sum.
+- **Proration** (`app/salary/calculations.py::prorate_fixed_salary`, pure,
+  no DB/FastAPI imports, unit-tested standalone): splits the range into
+  one segment per calendar month it touches; for each segment,
+  `segment_amount = money(fixed_salary / days_in_that_month *
+  segment_days)`, **rounded per segment before summing** (same
+  per-item-before-aggregation rule §2 states for receipts). Worked
+  examples (verified by both a unit test and a live `curl` against a real
+  nurse with `fixed_salary=2,800,000`, full February 2026 → exactly
+  `2,800,000`):
+  - `fixed_salary=3,000,000`, range `2026-02-10..2026-02-20` (11 days,
+    Feb has 28 days): `3,000,000/28*11 = 1,178,571.43` → **`1,178,571`**.
+  - `fixed_salary=3,000,000`, range `2026-01-25..2026-02-05`: Jan segment
+    (7/31 days) = `677,419`; Feb segment (5/28 days) = `535,714`; total =
+    **`1,213,133`**.
+- **Paid amount / balance view** (`compute_paid_amount`,
+  `GET /salary/balance`): `SUM(amount) WHERE staff_id=:id AND
+  is_voided=false AND period_start <= :date_to AND period_end >=
+  :date_from` — standard interval overlap. **Confirmed with the user: a
+  payment's full amount counts on any overlap, never prorated** — a
+  payment spanning two months shows in full in both months' balance
+  views. Verified with a unit test constructing exactly that case
+  (`2026-01-25..2026-02-05`) and asserting both the January and February
+  balance queries return the full amount. Default range when
+  `date_from`/`date_to` are both omitted is the current calendar month
+  (`_current_month_range()` — first day to last day, not "month to
+  date").
+  **This is a distinct question from the Dashboard's `sum_total_paid`**
+  (`GET /salary/total-paid`), which filters by `paid_at` (when the money
+  actually went out) using the same exclusive-upper-bound
+  `get_business_datetime_range()` every other report uses. The two will
+  legitimately disagree for the same range — that's expected, not a bug;
+  they answer different questions ("how much of this period's wages is
+  covered" vs. "how much did we hand out in this window").
+- **Lifetime summary** (`GET /salary/staff/{id}/summary`): doctor =
+  unbounded `doctor_share` sum + unbounded duty-entry sum; nurse/other =
+  `prorate_fixed_salary(fixed_salary, hire_date or created_at.date(),
+  today)` + unbounded duty-entry sum. **Known approximation, called out to
+  the user in planning:** without an explicit `hire_date`, a staff record
+  created long after someone actually started working will understate
+  their lifetime earnings — `hire_date` exists specifically so this can be
+  corrected when known.
+- `POST/GET/PATCH /salary/payments`, `POST /salary/payments/{id}/void`,
+  `GET /salary/balance`, `GET /salary/staff/{id}/summary`,
+  `GET /salary/total-paid` (Dashboard-only) — all manager/superadmin only.
+
+### 21.4 Dorixona (`app/pharmacy/`) — pharmacy running ledger
+
+- Table `pharmacy_entries` (`TimestampMixin` + `VoidableMixin`): `date`
+  (`DateTime(timezone=True)`), `medicine_cost` and `amount_paid` (both
+  `Numeric(12,0)`, both nullable, **at least one required per entry** via
+  check constraint `ck_pharmacy_entries_not_both_null` — mirrors the
+  original spreadsheet's rows that only ever filled in one column at a
+  time).
+- `GET /pharmacy/summary` returns `{total_paid, total_medicine_cost,
+  balance}` where `balance = money(total_paid - total_medicine_cost)` —
+  the sign is a pure frontend decision (green ≥ 0 / red < 0), reproducing
+  the original spreadsheet's conditional formatting semantics. Verified
+  live against the exact numbers from the source spreadsheet
+  (`medicine_cost=722`, `amount_paid=200` → `balance=-522`, matching the
+  spreadsheet's own worked example).
+- **Never referenced by `finance/reports.py`, `/reports/*`, or the
+  Dashboard — enforce this in review, not just by omission**, per explicit
+  user instruction. It's reachable only from its own top-level navbar
+  entry and its own standalone page.
+- `POST/GET/PATCH /pharmacy/entries`, `POST /pharmacy/entries/{id}/void`,
+  `GET /pharmacy/summary` — manager/superadmin only.
+
+### 21.5 Boshqa harajatlar (`app/expenses/`) — other expenses
+
+- Table `expenses` (`TimestampMixin` + `VoidableMixin`): `title`
+  (`String(255)`), `amount` (`Numeric(12,0)`), `date`
+  (`DateTime(timezone=True)`).
+- `GET /expenses/summary` (`date_from`, `date_to`, `search`) returns
+  `{total_amount, count}` computed over the **full filtered set**, never
+  just the current page — same `sum_*` pattern as
+  `finance/reports.py`'s report builders.
+- `GET /expenses` list gained `search` (title `ILIKE`) alongside the usual
+  date-range filters.
+- `POST/GET/PATCH /expenses`, `POST /expenses/{id}/void`,
+  `GET /expenses/summary` — manager/superadmin only.
+
+### 21.6 Dashboard (`Boshqaruv paneli`) additions
+
+- No backend change to `build_total_report` or its composition rule — it
+  still only sums its three existing finance sub-reports, never
+  salary/expense data (would create a second source of truth for the same
+  math, exactly what §2's total-report-composition rule already forbids).
+- `app/static/js/dashboard.js`'s `loadReport()` now runs
+  `Promise.all([/reports/total, /salary/total-paid, /expenses/summary])`
+  with the same date-range inputs already on the page, and renders four
+  new cards after the existing section cards: total salary payouts,
+  income after salary, total other expenses, income after salary and
+  expenses. `app/templates/dashboard.html` gained one new `<h2>` + grid
+  block. No caching anywhere in this stack, so these numbers are correct
+  immediately after any salary payment, avans, or expense — confirmed by
+  reading `dashboard.js`, which does a fresh `fetch()` on every load, same
+  as before this session.
+- **Dorixona numbers never appear on the Dashboard** — verified by
+  checking `dashboard.js` calls only the two new endpoints above plus the
+  pre-existing `/reports/total`, nothing under `/pharmacy/*`.
+
+### 21.7 New templates/JS/nav
+
+- `app/templates/staff.html` + `staff.js` (replaces `doctors.html`/
+  `doctors.js`), `navbatchilik.html` + `navbatchilik.js`, `oyliklar.html` +
+  `oyliklar.js` (balance view, payment-entry form, filterable payment
+  history, per-staff lifetime summary — all on one page), `dorixona.html`
+  + `dorixona.js` (entries + green/red balance cards), `harajatlar.html` +
+  `harajatlar.js` (entries + date/title filters + totals cards). New page
+  routes in `app/web/router.py`: `/staff-page`, `/navbatchilik-page`,
+  `/salary-page`, `/pharmacy-page`, `/expenses-page`.
+- `app/static/js/nav.js`: replaced the `Shifikorlar` entry with
+  `Ishchilar` (`superadmin`/`manager` only, dropped `assistant`), added
+  `Navbatchilik`, `Oyliklar`, `Dorixona`, `Boshqa harajatlar` — all
+  `superadmin`/`manager` only. Every new page calls `initPage({
+  allowedRoles: ["superadmin", "manager"] })`, same pattern as every other
+  admin-only page (§19's `ROLE_HOME` redirect map handles the
+  disallowed-role bounce with no new redirect-loop risk, since none of
+  these five pages are in any role's `ROLE_HOME`).
+
+### 21.8 Migrations (3 total, in order)
+
+1. `7f1a9c2d4e6b_merge_doctors_into_staff` (§21.1).
+2. `9b3e5d7f1a2c_create_duty_entries_and_salary_payments`.
+3. `c4d6f8a0b2e4_create_pharmacy_entries_and_expenses`.
+
+All three applied cleanly to the live dev DB (`alembic upgrade head` via
+`docker exec clinic-crm alembic upgrade head`) and spot-checked with `\d`
+in `psql` — `staff`'s FK-referenced-by list correctly shows
+`consultations`/`surgeries`/`rooms`/`duty_entries`/`salary_payments` all
+pointing at it.
+
+### 21.9 A second Python 3.14 gotcha worth remembering
+
+Any Pydantic model **or SQLAlchemy `Mapped[...]` model** with a field
+named exactly `date` and typed `date | None` breaks under Python 3.14's
+deferred-annotation evaluation: the field's own default value (`None`)
+shadows the imported `date` type when the annotation string is evaluated,
+producing `TypeError: unsupported operand type(s) for |: 'NoneType' and
+'NoneType'`. Hit this in `app/duty/schemas.py` and `app/duty/models.py`
+(the only places in this codebase using `date` as both a field name and
+the type — every existing `date`-named field elsewhere is typed
+`datetime`, which doesn't collide). Fixed by importing the type under an
+alias (`from datetime import date as date_`) rather than renaming the
+field. Worth checking for this specific collision in any future new
+model/schema with a `Date`-typed column named `date`.
+
+### 21.10 Verification
+
+- `pytest -q`: 60/60 passing (34 new tests across `tests/staff/`,
+  `tests/duty/`, `tests/salary/` (calculations, earned, payments,
+  balance), `tests/pharmacy/`, `tests/expenses/`, plus the 26 pre-existing
+  finance/doctor tests updated to construct `Staff(role=StaffRoleEnum
+  .DOCTOR, ...)` instead of the now-deleted `Doctor`).
+- `alembic upgrade head` against the live dev DB, schema spot-checked via
+  `psql \d`.
+- Full live `curl` smoke test against the running dev container covering:
+  creating a doctor/nurse, `/staff/options` role-forcing (including as a
+  real assistant JWT, not just unit-tested), a nurse correctly rejected
+  when attached to a consultation (404), a duty entry, a salary avans
+  payment reflected correctly in `/salary/balance`, a lifetime summary,
+  two pharmacy entries reproducing the source spreadsheet's own
+  `-522` balance example, an expense and its summary, `/salary/total-paid`
+  and `/reports/total` both feeding the Dashboard math, and delete-blocked
+  vs. deactivate-allowed on a staff member with history. All test data
+  created during this pass was voided/deactivated/blocked afterward to
+  leave the dev database clean.
+- All five new page routes and their static JS files confirmed served
+  (200) from the running container.

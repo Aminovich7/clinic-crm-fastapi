@@ -4,8 +4,9 @@ from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.doctors.schemas import DoctorCreate
-from app.doctors.service import create_doctor
+from app.staff.models import StaffRoleEnum
+from app.staff.schemas import StaffCreate
+from app.staff.service import create_staff
 from app.finance.models import ConsultationType
 from app.finance.schemas import ConsultationCreate, ConsultationUpdate
 from app.finance.service import (
@@ -28,10 +29,11 @@ class TestConsultationService:
         actor = result.scalars().first()
 
         # Create a doctor
-        doctor = await create_doctor(
+        doctor = await create_staff(
             seeded_db,
             actor=actor,
-            data=DoctorCreate(
+            data=StaffCreate(
+                role=StaffRoleEnum.DOCTOR,
                 first_name="Dr.",
                 last_name="Consultation",
                 specialty="Test",
@@ -66,10 +68,11 @@ class TestConsultationService:
         )
         actor = result.scalars().first()
 
-        doctor = await create_doctor(
+        doctor = await create_staff(
             seeded_db,
             actor=actor,
-            data=DoctorCreate(
+            data=StaffCreate(
+                role=StaffRoleEnum.DOCTOR,
                 first_name="Dr.",
                 last_name="ExpenseTest",
                 specialty="Test",
@@ -100,10 +103,11 @@ class TestConsultationService:
         )
         actor = result.scalars().first()
 
-        doctor = await create_doctor(
+        doctor = await create_staff(
             seeded_db,
             actor=actor,
-            data=DoctorCreate(
+            data=StaffCreate(
+                role=StaffRoleEnum.DOCTOR,
                 first_name="Dr.",
                 last_name="UpdateTest",
                 specialty="Test",
@@ -138,10 +142,11 @@ class TestConsultationService:
         )
         actor = result.scalars().first()
 
-        doctor = await create_doctor(
+        doctor = await create_staff(
             seeded_db,
             actor=actor,
-            data=DoctorCreate(
+            data=StaffCreate(
+                role=StaffRoleEnum.DOCTOR,
                 first_name="Dr.",
                 last_name="VoidTest",
                 specialty="Test",
@@ -178,10 +183,11 @@ class TestConsultationService:
         )
         actor = result.scalars().first()
 
-        doctor = await create_doctor(
+        doctor = await create_staff(
             seeded_db,
             actor=actor,
-            data=DoctorCreate(
+            data=StaffCreate(
+                role=StaffRoleEnum.DOCTOR,
                 first_name="Dr.",
                 last_name="Void409Test",
                 specialty="Test",

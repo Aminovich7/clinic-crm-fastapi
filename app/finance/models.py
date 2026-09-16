@@ -86,7 +86,7 @@ class Consultation(Base, TimestampMixin, VoidableMixin):
     )
 
     doctor_id: Mapped[int | None] = mapped_column(ForeignKey(
-        "doctors.id",
+        "staff.id",
         ondelete="SET NULL",
     ),
     nullable=True,
@@ -156,7 +156,7 @@ class Surgery(Base, TimestampMixin, VoidableMixin):
 
     doctor_id: Mapped[int | None] = mapped_column(
         ForeignKey(
-            "doctors.id",
+            "staff.id",
             ondelete="SET NULL",
         ),
         nullable=True,
@@ -212,7 +212,7 @@ class Room(Base, TimestampMixin, VoidableMixin):
 
     doctor_id: Mapped[int | None] = mapped_column(
         ForeignKey(
-            "doctors.id",
+            "staff.id",
             ondelete="SET NULL",
         ),
         nullable=True,

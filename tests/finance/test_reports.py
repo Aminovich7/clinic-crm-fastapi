@@ -5,8 +5,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from zoneinfo import ZoneInfo
 
-from app.doctors.schemas import DoctorCreate
-from app.doctors.service import create_doctor
+from app.staff.models import StaffRoleEnum
+from app.staff.schemas import StaffCreate
+from app.staff.service import create_staff
 from app.finance.models import ConsultationType
 from app.finance.reports import (
     get_business_datetime_range,
@@ -38,10 +39,11 @@ class TestReports:
         )
         actor = result.scalars().first()
 
-        doctor = await create_doctor(
+        doctor = await create_staff(
             seeded_db,
             actor=actor,
-            data=DoctorCreate(
+            data=StaffCreate(
+                role=StaffRoleEnum.DOCTOR,
                 first_name="Dr.",
                 last_name="ReportConsult",
                 specialty="Test",
@@ -80,10 +82,11 @@ class TestReports:
         )
         actor = result.scalars().first()
 
-        doctor = await create_doctor(
+        doctor = await create_staff(
             seeded_db,
             actor=actor,
-            data=DoctorCreate(
+            data=StaffCreate(
+                role=StaffRoleEnum.DOCTOR,
                 first_name="Dr.",
                 last_name="ReportSurgery",
                 specialty="Surgeon",
@@ -120,10 +123,11 @@ class TestReports:
         )
         actor = result.scalars().first()
 
-        doctor = await create_doctor(
+        doctor = await create_staff(
             seeded_db,
             actor=actor,
-            data=DoctorCreate(
+            data=StaffCreate(
+                role=StaffRoleEnum.DOCTOR,
                 first_name="Dr.",
                 last_name="ReportRoom",
                 specialty="General",
@@ -158,10 +162,11 @@ class TestReports:
         )
         actor = result.scalars().first()
 
-        doctor = await create_doctor(
+        doctor = await create_staff(
             seeded_db,
             actor=actor,
-            data=DoctorCreate(
+            data=StaffCreate(
+                role=StaffRoleEnum.DOCTOR,
                 first_name="Dr.",
                 last_name="ReportTotal",
                 specialty="Test",

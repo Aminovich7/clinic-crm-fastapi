@@ -3,8 +3,9 @@ from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.doctors.schemas import DoctorCreate
-from app.doctors.service import create_doctor
+from app.staff.models import StaffRoleEnum
+from app.staff.schemas import StaffCreate
+from app.staff.service import create_staff
 from app.finance.schemas import SurgeryCreate, SurgeryUpdate
 from app.finance.service import create_surgery, void_surgery, update_surgery
 from app.users.models import User, UserRoleEnum
@@ -18,10 +19,11 @@ class TestSurgeryService:
         )
         actor = result.scalars().first()
 
-        doctor = await create_doctor(
+        doctor = await create_staff(
             seeded_db,
             actor=actor,
-            data=DoctorCreate(
+            data=StaffCreate(
+                role=StaffRoleEnum.DOCTOR,
                 first_name="Dr.",
                 last_name="Surgery",
                 specialty="Surgeon",
@@ -54,10 +56,11 @@ class TestSurgeryService:
         )
         actor = result.scalars().first()
 
-        doctor = await create_doctor(
+        doctor = await create_staff(
             seeded_db,
             actor=actor,
-            data=DoctorCreate(
+            data=StaffCreate(
+                role=StaffRoleEnum.DOCTOR,
                 first_name="Dr.",
                 last_name="SurgeryExpense",
                 specialty="Surgeon",
@@ -85,10 +88,11 @@ class TestSurgeryService:
         )
         actor = result.scalars().first()
 
-        doctor = await create_doctor(
+        doctor = await create_staff(
             seeded_db,
             actor=actor,
-            data=DoctorCreate(
+            data=StaffCreate(
+                role=StaffRoleEnum.DOCTOR,
                 first_name="Dr.",
                 last_name="SurgeryUpdate",
                 specialty="Surgeon",
@@ -122,10 +126,11 @@ class TestSurgeryService:
         )
         actor = result.scalars().first()
 
-        doctor = await create_doctor(
+        doctor = await create_staff(
             seeded_db,
             actor=actor,
-            data=DoctorCreate(
+            data=StaffCreate(
+                role=StaffRoleEnum.DOCTOR,
                 first_name="Dr.",
                 last_name="SurgeryVoid",
                 specialty="Surgeon",

@@ -58,7 +58,7 @@
 
   async function loadDoctorOptions() {
     try {
-      const options = await apiFetch("/doctors/options");
+      const options = await apiFetch("/staff/options?role=doctor");
       doctorNameById = Object.fromEntries(options.map((doc) => [doc.id, doc.name]));
       ["c_doctor", "s_doctor", "r_doctor"].forEach((id) => {
         const select = document.getElementById(id);

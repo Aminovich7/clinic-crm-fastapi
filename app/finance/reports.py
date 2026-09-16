@@ -7,7 +7,6 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.doctors.models import Doctor
 from app.finance.calculations import consultation_totals, money, room_totals, surgery_totals
 from app.finance.models import Consultation, ConsultationType, Room, Surgery
 from app.finance.schemas import (
@@ -18,6 +17,7 @@ from app.finance.schemas import (
     SurgeryReport,
     TotalReport,
 )
+from app.staff.models import Staff
 from app.users.models import User, UserRoleEnum
 
 CLINIC_TZ = ZoneInfo("Asia/Tashkent")
@@ -51,16 +51,16 @@ def get_business_datetime_range(
     return start, end_exclusive
 
 
-async def _load_doctor_map(db: AsyncSession, doctor_ids: set[int]) -> dict[int, Doctor]:
+async def _load_doctor_map(db: AsyncSession, doctor_ids: set[int]) -> dict[int, Staff]:
     if not doctor_ids:
         return {}
 
-    stmt = select(Doctor).where(Doctor.id.in_(doctor_ids))
+    stmt = select(Staff).where(Staff.id.in_(doctor_ids))
     doctors = (await db.execute(stmt)).scalars().all()
     return {doctor.id: doctor for doctor in doctors}
 
 
-def _doctor_shares(doctor_groups: dict[int, dict], doctor_map: dict[int, Doctor]) -> list[DoctorShareReport]:
+def _doctor_shares(doctor_groups: dict[int, dict], doctor_map: dict[int, Staff]) -> list[DoctorShareReport]:
     shares = []
     for doctor_id, group in doctor_groups.items():
         doctor = doctor_map.get(doctor_id)

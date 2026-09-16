@@ -3,8 +3,9 @@ from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.doctors.schemas import DoctorCreate
-from app.doctors.service import create_doctor
+from app.staff.models import StaffRoleEnum
+from app.staff.schemas import StaffCreate
+from app.staff.service import create_staff
 from app.finance.schemas import RoomCreate, RoomUpdate
 from app.finance.service import create_room, void_room, update_room
 from app.users.models import User, UserRoleEnum
@@ -18,10 +19,11 @@ class TestRoomService:
         )
         actor = result.scalars().first()
 
-        doctor = await create_doctor(
+        doctor = await create_staff(
             seeded_db,
             actor=actor,
-            data=DoctorCreate(
+            data=StaffCreate(
+                role=StaffRoleEnum.DOCTOR,
                 first_name="Dr.",
                 last_name="Room",
                 specialty="General",
@@ -49,10 +51,11 @@ class TestRoomService:
         )
         actor = result.scalars().first()
 
-        doctor = await create_doctor(
+        doctor = await create_staff(
             seeded_db,
             actor=actor,
-            data=DoctorCreate(
+            data=StaffCreate(
+                role=StaffRoleEnum.DOCTOR,
                 first_name="Dr.",
                 last_name="RoomUpdate",
                 specialty="General",
@@ -84,10 +87,11 @@ class TestRoomService:
         )
         actor = result.scalars().first()
 
-        doctor = await create_doctor(
+        doctor = await create_staff(
             seeded_db,
             actor=actor,
-            data=DoctorCreate(
+            data=StaffCreate(
+                role=StaffRoleEnum.DOCTOR,
                 first_name="Dr.",
                 last_name="RoomVoid",
                 specialty="General",

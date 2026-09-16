@@ -11,8 +11,12 @@ from app.core.config import settings
 from app.core.rate_limit import limiter
 from app.core.redis import redis_client
 from app.db.session import AsyncSessionLocal, get_db
-from app.doctors.router import router as doctors_router
+from app.duty.router import router as duty_router
+from app.expenses.router import router as expenses_router
 from app.finance.router import router as finance_router
+from app.pharmacy.router import router as pharmacy_router
+from app.salary.router import router as salary_router
+from app.staff.router import router as staff_router
 from app.users.router import router as users_router
 from app.users.seed import seed_superadmin
 from app.web.router import router as web_router
@@ -66,7 +70,11 @@ async def health():
 
 
 app.include_router(users_router)
-app.include_router(doctors_router)
+app.include_router(staff_router)
 app.include_router(finance_router)
+app.include_router(duty_router)
+app.include_router(salary_router)
+app.include_router(pharmacy_router)
+app.include_router(expenses_router)
 app.include_router(audit_router)
 app.include_router(web_router)

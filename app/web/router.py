@@ -15,9 +15,29 @@ async def dashboard_page(request: Request):
     return templates.TemplateResponse(request, "dashboard.html")
 
 
-@router.get("/doctors-page")
-async def doctors_page(request: Request):
-    return templates.TemplateResponse(request, "doctors.html")
+@router.get("/staff-page")
+async def staff_page(request: Request):
+    return templates.TemplateResponse(request, "staff.html")
+
+
+@router.get("/navbatchilik-page")
+async def navbatchilik_page(request: Request):
+    return templates.TemplateResponse(request, "navbatchilik.html")
+
+
+@router.get("/salary-page")
+async def salary_page(request: Request):
+    return templates.TemplateResponse(request, "oyliklar.html")
+
+
+@router.get("/pharmacy-page")
+async def pharmacy_page(request: Request):
+    return templates.TemplateResponse(request, "dorixona.html")
+
+
+@router.get("/expenses-page")
+async def expenses_page(request: Request):
+    return templates.TemplateResponse(request, "harajatlar.html")
 
 
 @router.get("/receipts")
