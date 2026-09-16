@@ -51,10 +51,72 @@
   }
 
   // --- Balance ---
+
+  // Local calendar-month arithmetic only (no UTC round-trip), so this is
+  // correct regardless of the viewer's time zone. offsetMonths=0 is the
+  // current month, -1 the previous month, etc.
+  function firstAndLastOfMonth(offsetMonths) {
+    const now = new Date();
+    const first = new Date(now.getFullYear(), now.getMonth() + offsetMonths, 1);
+    const last = new Date(now.getFullYear(), now.getMonth() + offsetMonths + 1, 0);
+    const toInputValue = (d) => {
+      const pad = (n) => String(n).padStart(2, "0");
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    };
+    return { from: toInputValue(first), to: toInputValue(last) };
+  }
+
+  function applyMonthShortcut(offsetMonths) {
+    const { from, to } = firstAndLastOfMonth(offsetMonths);
+    document.getElementById("balance_from").value = from;
+    document.getElementById("balance_to").value = to;
+    loadBalance();
+  }
+
+  function daysInMonth(year, month) {
+    // month is 1-indexed; day 0 of the "next" month rolls back to the
+    // last day of this one.
+    return new Date(year, month, 0).getDate();
+  }
+
+  // Always reflects whatever range loadBalance() is about to query,
+  // whether set by a shortcut button, typed manually, or left blank (in
+  // which case it mirrors the backend's own default: the current
+  // calendar month — see app/salary/service.py::_current_month_range).
+  function updateBalancePeriodLabel() {
+    const label = document.getElementById("balance-period-label");
+    let fromVal = document.getElementById("balance_from").value;
+    let toVal = document.getElementById("balance_to").value;
+
+    if (!fromVal && !toVal) {
+      const current = firstAndLastOfMonth(0);
+      fromVal = current.from;
+      toVal = current.to;
+    }
+
+    if (!fromVal || !toVal) {
+      label.textContent = "";
+      return;
+    }
+
+    const [fromYear, fromMonth, fromDay] = fromVal.split("-").map(Number);
+    const [toYear, toMonth, toDay] = toVal.split("-").map(Number);
+    const isFullCalendarMonth =
+      fromDay === 1 &&
+      fromYear === toYear &&
+      fromMonth === toMonth &&
+      toDay === daysInMonth(toYear, toMonth);
+
+    label.textContent = isFullCalendarMonth
+      ? `Davr: ${UZ_MONTHS[fromMonth - 1]} ${fromYear}`
+      : `Davr: ${formatDate(fromVal)} — ${formatDate(toVal)}`;
+  }
+
   async function loadBalance() {
     const tbody = document.getElementById("balance-tbody");
     tbody.innerHTML = "";
     clearMessages();
+    updateBalancePeriodLabel();
 
     const params = new URLSearchParams();
     const staffId = document.getElementById("balance_staff").value;
@@ -82,11 +144,8 @@
     }
   }
 
-  document.getElementById("current-month-btn").addEventListener("click", () => {
-    document.getElementById("balance_from").value = "";
-    document.getElementById("balance_to").value = "";
-    loadBalance();
-  });
+  document.getElementById("current-month-btn").addEventListener("click", () => applyMonthShortcut(0));
+  document.getElementById("previous-month-btn").addEventListener("click", () => applyMonthShortcut(-1));
 
   document.getElementById("balance-form").addEventListener("submit", (event) => {
     event.preventDefault();

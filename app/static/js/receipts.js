@@ -360,9 +360,10 @@
     room: "/rooms",
   };
 
-  // Base columns, before the role-conditional "Klinika foydasi" column
-  // (manager/superadmin only — mirrors the create-form preview's
-  // restriction, §Session 8) gets spliced in just before "Holati".
+  // Base columns, before the role-conditional "Shifokor ulushi" and
+  // "Klinika foydasi" columns (manager/superadmin only — mirrors the
+  // create-form preview's restriction, §Session 8) get spliced in just
+  // before "Holati". Assistants never see either column.
   const BASE_HEADERS = {
     consultation: ["Chek raqami", "Sana", "Turi", "Shifokor", "Qo'shdi", "Summa", "Shifokor foizi", "Xarajat", "Holati", "Amallar"],
     surgery: ["Chek raqami", "Sana", "Shifokor", "Qo'shdi", "Summa", "Shifokor foizi", "Xarajat", "Holati", "Amallar"],
@@ -372,23 +373,31 @@
   function headersFor(kind) {
     const headers = [...BASE_HEADERS[kind]];
     if (canManage) {
-      headers.splice(headers.indexOf("Holati"), 0, "Klinika foydasi");
+      headers.splice(headers.indexOf("Holati"), 0, "Shifokor ulushi", "Klinika foydasi");
     }
     return headers;
   }
 
-  // Mirrors app/finance/calculations.py exactly (never persisted server-
-  // side, so it has to be recomputed here the same way the create-form
-  // preview does it).
-  function computeClinicProfit(kind, record) {
+  // Both mirror app/finance/calculations.py exactly (never persisted
+  // server-side, so they have to be recomputed here the same way the
+  // create-form preview does it).
+  function computeDoctorShare(kind, record) {
     const amount = Number(record.amount);
     const percent = Number(record.doctor_percent);
     if (kind === "room") {
-      const doctorShare = Math.round((amount * percent) / 100);
+      return Math.round((amount * percent) / 100);
+    }
+    const expense = Number(kind === "consultation" ? record.minus_beshming ?? 0 : record.surgery_expense);
+    return Math.round(((amount - expense) * percent) / 100);
+  }
+
+  function computeClinicProfit(kind, record) {
+    const amount = Number(record.amount);
+    const doctorShare = computeDoctorShare(kind, record);
+    if (kind === "room") {
       return amount - doctorShare;
     }
     const expense = Number(kind === "consultation" ? record.minus_beshming ?? 0 : record.surgery_expense);
-    const doctorShare = Math.round(((amount - expense) * percent) / 100);
     return amount - doctorShare - expense;
   }
 
@@ -421,6 +430,7 @@
     const typeLabel = record.type === "korik" ? "Ko'rik" : "Qayta ko'rik";
     const doctorLabel = escapeHtml(record.doctor_id ? (doctorNameById[record.doctor_id] || "—") : "—");
     const creatorLabel = escapeHtml(creatorNameById[record.created_by_id] || "—");
+    const shareCell = canManage ? `<td>${formatMoney(computeDoctorShare(kind, record))}</td>` : "";
     const profitCell = canManage ? `<td>${formatMoney(computeClinicProfit(kind, record))}</td>` : "";
 
     if (kind === "consultation") {
@@ -433,6 +443,7 @@
         <td>${formatMoney(record.amount)}</td>
         <td>${formatMoney(record.doctor_percent)}%</td>
         <td>${formatMoney(record.minus_beshming ?? 0)}</td>
+        ${shareCell}
         ${profitCell}
         <td>${statusLabel}</td>
         <td class="actions-cell">${editBtn}${voidBtn}</td>
@@ -446,6 +457,7 @@
         <td>${formatMoney(record.amount)}</td>
         <td>${formatMoney(record.doctor_percent)}%</td>
         <td>${formatMoney(record.surgery_expense)}</td>
+        ${shareCell}
         ${profitCell}
         <td>${statusLabel}</td>
         <td class="actions-cell">${editBtn}${voidBtn}</td>
@@ -458,6 +470,7 @@
         <td>${creatorLabel}</td>
         <td>${formatMoney(record.amount)}</td>
         <td>${formatMoney(record.doctor_percent)}%</td>
+        ${shareCell}
         ${profitCell}
         <td>${statusLabel}</td>
         <td class="actions-cell">${editBtn}${voidBtn}</td>

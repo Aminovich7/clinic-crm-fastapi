@@ -1925,3 +1925,96 @@ one-off fix would have left the user with a false sense that "the gap"
   (physical delete, since it had no financial/payroll history yet).
 - `node --check` on every touched file: all pass. `pytest -q`: still
   61/61 (backend untouched this session).
+
+---
+
+## 25. Session 16 — Oyliklar balance: visible period, "O'tgan oy" shortcut
+
+User noticed "Joriy oy" changed the numbers but never showed *which*
+month those numbers were for. Fixed with two changes plus a new shortcut,
+all in `app/templates/oyliklar.html` and `app/static/js/oyliklar.js`,
+nothing backend:
+
+- **"Joriy oy" now fills the `Dan`/`Gacha` date inputs** with the actual
+  first/last day of the current calendar month instead of blanking them —
+  the native date pickers themselves become self-explanatory
+  (`09/01/2026`–`09/30/2026`), relying on nothing but reading the form.
+- **New "O'tgan oy" (previous month) button**, next to "Joriy oy", fills
+  the same fields with the previous calendar month's bounds. Both buttons
+  share one `applyMonthShortcut(offsetMonths)` helper built on
+  `firstAndLastOfMonth(offsetMonths)` (`0` = current, `-1` = previous;
+  local calendar-month arithmetic only, no UTC round-trip, so it's correct
+  regardless of the viewer's time zone).
+- **New "Davr: …" label** under the filter form, updated by
+  `updateBalancePeriodLabel()` every time `loadBalance()` runs (button
+  click, form submit, or initial page load) — so it's always accurate
+  regardless of *how* the range was set, not just via the two shortcut
+  buttons:
+  - If both date fields are blank, it computes the same current-month
+    default the backend applies (`app/salary/service.py`'s
+    `_current_month_range()`), so the very first page load already shows
+    e.g. "Davr: Sentabr 2026" before any button is clicked.
+  - If the resolved range exactly spans one full calendar month
+    (day 1 to the last day of that month, same month/year), it renders
+    just the month name — "Davr: Sentabr 2026" — reusing `UZ_MONTHS` from
+    the §22 date-formatting work.
+  - Otherwise (any manually-picked custom range) it renders
+    "Davr: `DD-MonthName-YYYY` — `DD-MonthName-YYYY`" via `formatDate`.
+  - Verified this boundary logic in isolation with a standalone Node
+    script covering four cases: a custom 5-day range, a full September,
+    a full February (28 days — proves the "last day of month" check isn't
+    hardcoded to 30/31), and a 29-of-30-day near-miss that must *not* be
+    mistaken for a full month. All four matched expectations exactly.
+- Verified live as the real `Second Manager` account: blank load showed
+  "Davr: Sentabr 2026" by default; clicking "Joriy oy" filled
+  `09/01/2026`–`09/30/2026` and kept the same label; clicking "O'tgan oy"
+  filled `08/01/2026`–`08/31/2026`, updated the label to "Davr: Avgust
+  2026", and the balance table's numbers changed accordingly (e.g.
+  Nurova Zarina's full fixed salary showing for August, other staff with
+  no August activity correctly at 0). The custom-range case was verified
+  via the standalone Node script above instead of live typing, after the
+  native date-input's segmented-entry UI proved too unreliable to drive
+  through browser automation in this session (not an app bug — a
+  same-issue-as-before quirk of typing into `<input type="date">` via
+  synthetic key events).
+- `node --check`: pass. `pytest -q`: 61/61 (backend untouched).
+
+---
+
+## 26. Session 17 — per-receipt "Shifokor ulushi" column in Kvitansiyalar
+
+Consultations/Surgeries/Rooms already showed "Klinika foydasi" (clinic
+profit) per row for manager/superadmin, computed client-side. User asked
+for the doctor's own share per receipt too, positioned next to it, with
+no change for assistants. Entirely `app/static/js/receipts.js` — no
+backend/schema change, since `doctor_share` was already being computed
+client-side for the clinic-profit column and is never persisted server-
+side either way (§2's "never persist calculated fields" rule).
+
+- **`computeDoctorShare(kind, record)`** extracted as its own function
+  (mirrors `app/finance/calculations.py`'s formulas exactly, same as the
+  existing `computeClinicProfit`); `computeClinicProfit` now calls it
+  instead of duplicating the doctor-share arithmetic inline, so the two
+  numbers can never drift apart from each other.
+- **`headersFor(kind)`** now splices in `"Shifokor ulushi"` immediately
+  before `"Klinika foydasi"` (both still gated by `canManage` together,
+  same single `if` as before) — column order matches what the user
+  specified: `... Xarajat, Shifokor ulushi, Klinika foydasi, Holati, ...`.
+- **`renderRow()`**: new `shareCell`, built and gated exactly like the
+  existing `profitCell` (`canManage ? <td>... : ""`), inserted right
+  before `profitCell` in all three (consultation/surgery/room) row
+  templates.
+- **Assistants get zero change** — same as `profitCell` already worked,
+  `shareCell` is an empty string for them, and `headersFor` never splices
+  either column in, so the header row, the cells, and the live create-
+  form preview (already role-gated, untouched here) are all identical to
+  before.
+- Verified live as the real `Second Manager` account across all three
+  tabs: Ko'rik (100,000 amount, 50%, 5,000 expense → 47,500 doctor share,
+  47,500 clinic profit), Operatsiya (1,000,000, 40%, 100,000 expense →
+  360,000 / 540,000), Xona (1,000,000, 20% → 200,000 doctor share). Then
+  created a temporary assistant account (no password was on hand for the
+  existing `asst1`/`assist1` test accounts) and confirmed neither column
+  appears for them at all — blocked that temporary account afterward
+  (users have no delete endpoint, only block/unblock, per §2).
+- `node --check`: pass. `pytest -q`: 61/61 (backend untouched).
