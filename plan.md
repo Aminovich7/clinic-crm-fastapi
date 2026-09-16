@@ -1587,3 +1587,65 @@ model/schema with a `Date`-typed column named `date`.
   leave the dev database clean.
 - All five new page routes and their static JS files confirmed served
   (200) from the running container.
+
+### 21.11 Follow-up — actual in-browser verification (this was skipped the
+first time, and shouldn't have been)
+
+The prior verification pass (§21.10) was `curl`-only — it never actually
+opened these pages in a browser, which is exactly the gap the user called
+out ("you did not update front-end and UI accordingly"). Went back and did
+it properly with Claude in Chrome, logged in as `CHANGE_ME_ADMIN_USERNAME`:
+
+- **First load showed stale UI** — old nav (`Shifokorlar`, no new links)
+  and a page that looked broken. This was **browser caching, not a code
+  bug** — `GET /static/js/nav.js` etc. had no `Cache-Control` header, so
+  the browser served a heuristically-cached copy from before this
+  session's edits even across normal navigations, not just page reloads.
+  A hard reload (`ctrl+shift+r`) immediately showed the correct nav with
+  all five new links. **This is the third time this exact class of
+  confusion has hit a session** (see §19's debugging note for the first
+  two) — this time it's fixed at the source instead of just re-explained:
+  `app/main.py` now defines a `StaticFiles` subclass
+  (`get_response()` override) that sets `Cache-Control: no-cache` on
+  every response under `/static/*`. This doesn't disable caching — the
+  browser still caches the file and still sends a cheap conditional GET
+  (`If-None-Match`) on the next request, getting a `304` if nothing
+  changed — it just guarantees a changed file is never served stale
+  without at least asking the server first. Verified via `curl -I
+  /static/js/nav.js` showing `cache-control: no-cache` in the response.
+- **Ishchilar**: added a real nurse (`Yusupova Malika`, `fixed_salary=
+  3,200,000`) through the actual add-staff form; confirmed the
+  role-conditional field toggling (specialty always visible since it's
+  optional for nurse/other, `fixed_salary` hidden for `role=doctor`,
+  shown for `nurse`/`other`) works, and the new row appeared in the table
+  immediately with the correct role/salary/status columns.
+- **Navbatchilik**: added a duty entry for that nurse through the real
+  form (date-input segment editing needed care — typing `/` characters
+  into an HTML date input doesn't work, has to be plain digits typed into
+  the focused segment); entry appeared correctly in the list.
+  **Found and fixed a real (cosmetic) bug here**: the staff picker showed
+  raw role values (`(doctor)`, `(nurse)`) instead of Uzbek labels —
+  `oyliklar.js`/`staff.js` already had a `roleLabels` map for this,
+  `navbatchilik.js` didn't. Added the same map.
+- **Oyliklar**: recorded a real `FULL`-type payment (1,000,000) for the
+  nurse through the form; the balance table, payment history, and
+  lifetime-summary cards all updated live and matched the numbers already
+  verified by unit test/curl (earned 3,275,000 = prorated salary + duty
+  entry; after the payment, remaining 2,275,000; lifetime summary
+  181,667 earned / 1,000,000 paid / -818,333 remaining — the known
+  "just-created-today" approximation from §21.3, working as documented).
+- **Dorixona**: entered `medicine_cost=722` then `amount_paid=200`
+  through the real form and watched the balance card update live to
+  `-522` **in red text**, exactly reproducing the source spreadsheet's
+  own conditional-formatting example end to end, not just via API.
+- **Boshqa harajatlar**: added a real expense through the form; totals
+  card and list updated live, date/title filter card present and wired.
+- **Did not click any void/delete button in the browser** — those call
+  the browser's native `confirm()`, which blocks the automation session
+  if triggered by a tool click; all cleanup of records created during
+  this pass was done via the same authenticated API calls as §21.10,
+  confirmed after by reloading the Dashboard and seeing totals return to
+  their pre-session baseline (`0` for salary paid and expenses in the
+  current-month window).
+- `pytest -q` re-run after the `navbatchilik.js` and `main.py` changes:
+  still 60/60.

@@ -1,7 +1,8 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
+from fastapi.staticfiles import StaticFiles as _StaticFiles
+from starlette.types import Scope
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from sqlalchemy import text
@@ -20,6 +21,25 @@ from app.staff.router import router as staff_router
 from app.users.router import router as users_router
 from app.users.seed import seed_superadmin
 from app.web.router import router as web_router
+
+
+class StaticFiles(_StaticFiles):
+    """Forces revalidation on every static asset request.
+
+    Without an explicit Cache-Control header, browsers apply heuristic
+    caching to /static/js/*.js and can keep serving a stale script for a
+    long time after a deploy, even across normal (non-hard) reloads — this
+    has already caused confusion twice (see plan.md Session 10 and 12).
+    `no-cache` still lets the browser cache the file, it just forces a
+    conditional GET (If-None-Match/If-Modified-Since) on every request, so
+    an unchanged file still gets a cheap 304 while a changed one is never
+    served stale.
+    """
+
+    async def get_response(self, path: str, scope: Scope):
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
 
 
 @asynccontextmanager

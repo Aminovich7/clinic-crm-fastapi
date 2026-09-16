@@ -17,6 +17,8 @@
   let dateTo = "";
   let staffNameById = {};
 
+  const roleLabels = { doctor: "Shifokor", nurse: "Hamshira", other: "Boshqa" };
+
   function clearMessages() {
     errorContainer.innerHTML = "";
     successContainer.innerHTML = "";
@@ -40,7 +42,7 @@
       options.forEach((opt) => {
         const el = document.createElement("option");
         el.value = opt.id;
-        el.textContent = `${opt.name} (${opt.role})`;
+        el.textContent = `${opt.name} (${roleLabels[opt.role] || opt.role})`;
         select.appendChild(el);
       });
     });
