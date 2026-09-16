@@ -1,8 +1,19 @@
+import time
+
 from fastapi import APIRouter, Request
 from fastapi.templating import Jinja2Templates
 
 router = APIRouter(tags=["Web"])
 templates = Jinja2Templates(directory="app/templates")
+
+# Cache-busting: appended as ?v=... to every /static/* URL in templates
+# (see {{ asset_version }} usage). A fixed Cache-Control header alone
+# cannot force an already-cached browser to re-fetch a stale file — it
+# only prevents *future* staleness. Changing the URL itself is the only
+# way to guarantee a client picks up a change immediately. This value is
+# set once at process start, so every deploy/restart (including the dev
+# --reload watcher) busts every static asset at once.
+templates.env.globals["asset_version"] = str(int(time.time()))
 
 
 @router.get("/login")

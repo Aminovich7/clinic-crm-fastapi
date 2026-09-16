@@ -23,7 +23,7 @@
 
   async function loadDoctorSelectOptions() {
     try {
-      const options = await apiFetch("/doctors/options");
+      const options = await apiFetch("/staff/options?role=doctor");
       doctorSelect.innerHTML = '<option value="">— shifokorni tanlang —</option>';
       options.forEach((doc) => {
         const opt = document.createElement("option");

@@ -1649,3 +1649,93 @@ it properly with Claude in Chrome, logged in as `CHANGE_ME_ADMIN_USERNAME`:
   current-month window).
 - `pytest -q` re-run after the `navbatchilik.js` and `main.py` changes:
   still 60/60.
+
+### 21.12 Follow-up 2 — the `Cache-Control: no-cache` fix was necessary
+but not sufficient; real users were still stuck on stale JS
+
+After §21.11 shipped, the user reported the new nav/pages still weren't
+showing up. `docker logs` on the real running container (not the
+Claude-in-Chrome test session — a genuine user request, `172.23.0.1`)
+showed the smoking gun: `GET /doctors/options` and `GET /doctors-page`
+both `404`, meaning the user's actual browser was still executing the
+**pre-merge** `receipts.js`/`nav.js` that no longer match this codebase at
+all. **Root cause of why §21.11's fix didn't help:** `Cache-Control:
+no-cache` only changes behavior for requests made *after* the header
+starts being sent. A browser that already has a file cached from *before*
+that header existed applies the old heuristic-freshness rule and may not
+even attempt a conditional request for a long time — there's no
+`no-cache` header that can reach back in time and invalidate a copy the
+browser already considers fresh. The header was correct and stays (cheap
+304s for the common case going forward); it just doesn't solve the
+"user's browser cached something before today's deploy" problem on its
+own.
+
+**Real fix: cache-busting via versioned URLs**, so a code change is
+served from a *URL the browser has never seen before*, which makes the
+staleness question moot regardless of any caching policy:
+- `app/web/router.py`: `templates.env.globals["asset_version"] =
+  str(int(time.time()))`, computed once at process start (so every
+  restart — including the dev `--reload` watcher on every save, and every
+  production deploy — gets a new value automatically, no manual
+  versioning step to remember).
+- Every `<script src="/static/js/...">` / `<link
+  rel="stylesheet" href="/static/css/style.css">` across all 19
+  occurrences in `app/templates/*.html` (`base.html`'s 3 shared scripts +
+  1 stylesheet, `login.html`'s own 3 scripts + 1 stylesheet, and each of
+  the 12 page-specific script tags) now appends `?v={{ asset_version }}`.
+  Verified via `curl http://localhost:8000/dashboard` that the rendered
+  HTML actually contains the versioned URLs (e.g.
+  `dashboard.js?v=1789582810`), not just that the template source looks
+  right.
+- This means: the next time *any* user's browser loads *any* page after a
+  deploy, the HTML itself (never aggressively cached, confirmed via the
+  container access log showing a fresh `GET` for every page navigation)
+  references brand-new script URLs, forcing a real fetch — no hard reload
+  required on the user's end, unlike the guidance given in §19/§21.11.
+- **Also cleaned up dead code found during this pass**: `app/doctors/`
+  (the Python package) was correctly deleted in §21.1, but
+  `app/templates/doctors.html` and `app/static/js/doctors.js` were
+  orphaned leftovers — no route has served them since `/doctors-page` was
+  replaced by `/staff-page`, but they were never physically removed.
+  Deleted both.
+- `pytest -q`: still 60/60 (this change touches only template rendering
+  and a startup-time global, no business logic).
+
+### 21.13 Follow-up 3 — one more missed `/doctors/options` reference, and
+test-data pollution left over from §21.10/§21.11's own verification
+
+User report: the Hisobotlar "Shifokor bo'yicha" doctor dropdown was empty,
+and Navbatchilik's "qo'shish" staff picker showed doctors only, no
+nurses/others. Two unrelated causes, both confirmed via the live container
+before touching anything:
+
+- **`app/static/js/reports.js`'s `loadDoctorSelectOptions()` still called
+  the deleted `/doctors/options` endpoint** — this file was missed during
+  §21.1's ripple-fix pass (`receipts.js` was updated, `reports.js` was
+  not). Grepped the whole `app/` tree afterward for `/doctors/options`,
+  `/doctors-page`, and any other `/doctors...`/`Doctor`-class reference to
+  confirm this was the last one — clean now except for a couple of
+  harmless local identifiers (`loadDoctorOptions` function name in
+  `receipts.js`, a `"Doctor not found"` error string in
+  `finance/service.py`) that don't reference the deleted endpoint or
+  model. Fixed: `apiFetch("/staff/options?role=doctor")`.
+- **Navbatchilik's dropdown was correctly querying `/staff/options` with
+  no role filter** (as designed — it needs all three roles) — the actual
+  cause was that the only two nurse records in the dev DB
+  (`Nurova Zarina` id 6, `Yusupova Malika` id 7) had both been left
+  `inactive` by *my own* §21.10/§21.11 verification passes (deactivated
+  to test the activate/deactivate endpoints, never reactivated
+  afterward), and `/staff/options` correctly excludes inactive staff by
+  design. Not a code bug — reactivated both via `POST
+  /staff/{id}/activate`. **Lesson for future sessions: verification passes
+  that flip a record's status/void state as part of testing a feature
+  must revert that specific state change afterward, not just void/delete
+  financial records** — the generic "clean up test data" step in
+  §21.10/§21.11 covered voiding ledger rows but missed that a
+  deactivation is state pollution too and silently breaks a *different*
+  feature (any picker backed by `/staff/options`) until someone notices.
+- Verified live (not just via `curl`) as the actual manager account
+  (`Second Manager`) already in use for this project: "Shifokor bo'yicha"
+  now lists and correctly reports on all 4 doctors; Navbatchilik's picker
+  now lists all 4 doctors plus both nurses.
+- `pytest -q`: still 60/60.
