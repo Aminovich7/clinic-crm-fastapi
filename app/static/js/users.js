@@ -142,8 +142,8 @@
             }
           }
           tr.innerHTML = `
-            <td>${person.username}</td>
-            <td>${person.full_name}</td>
+            <td>${escapeHtml(person.username)}</td>
+            <td>${escapeHtml(person.full_name)}</td>
             <td>${isBlocked ? "bloklangan" : "faol"}</td>
             <td class="actions-cell">${actions.join("")}</td>
           `;

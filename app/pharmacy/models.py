@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, Numeric
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -39,6 +39,8 @@ class PharmacyEntry(Base, TimestampMixin, VoidableMixin):
 
     medicine_cost: Mapped[Decimal | None] = mapped_column(Numeric(12, 0), nullable=True)
     amount_paid: Mapped[Decimal | None] = mapped_column(Numeric(12, 0), nullable=True)
+
+    comment: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     created_by_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("users.id", ondelete="RESTRICT"),

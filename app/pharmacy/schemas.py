@@ -12,6 +12,7 @@ class PharmacyEntryCreate(BaseModel):
     date: datetime | None = None
     medicine_cost: Decimal | None = Field(default=None, ge=0)
     amount_paid: Decimal | None = Field(default=None, ge=0)
+    comment: str | None = Field(default=None, max_length=500)
 
     @model_validator(mode="after")
     def _require_one_value(self) -> "PharmacyEntryCreate":
@@ -24,6 +25,7 @@ class PharmacyEntryUpdate(BaseModel):
     date: datetime | None = None
     medicine_cost: Decimal | None = Field(default=None, ge=0)
     amount_paid: Decimal | None = Field(default=None, ge=0)
+    comment: str | None = Field(default=None, max_length=500)
 
 
 class PharmacyEntryRead(BaseModel):
@@ -33,6 +35,7 @@ class PharmacyEntryRead(BaseModel):
     date: datetime
     medicine_cost: Money | None
     amount_paid: Money | None
+    comment: str | None
     created_by_id: uuid.UUID
     is_voided: bool
     voided_at: datetime | None

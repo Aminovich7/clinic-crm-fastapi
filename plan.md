@@ -1828,3 +1828,100 @@ than only where first noticed:
   static JS, no backend code).
 - The test consultation created during verification (`Test Assistant`,
   receipt `99001`) was voided via the API afterward.
+
+---
+
+## 23. Session 14 — optional comment field on Dorixona entries
+
+- **Migration** `alembic/versions/d7e9f1b3c5a7_add_comment_to_pharmacy_entries.py`:
+  adds `pharmacy_entries.comment` (`String(500)`, nullable), applied to
+  the live dev DB and spot-checked via `psql \d pharmacy_entries`.
+- **Model** (`app/pharmacy/models.py`): `comment: Mapped[str | None] =
+  mapped_column(String(500), nullable=True)` — no check constraint needed,
+  a free-text note has no business-rule shape to enforce.
+- **Schemas** (`app/pharmacy/schemas.py`): `comment: str | None =
+  Field(default=None, max_length=500)` added to `PharmacyEntryCreate`,
+  `PharmacyEntryUpdate`, and `PharmacyEntryRead`.
+- **Service** (`app/pharmacy/service.py`): `create_pharmacy_entry` strips
+  and stores the comment (`None` if blank). `update_pharmacy_entry`'s
+  existing generic `exclude_unset` patch loop already handled the new
+  field automatically; added the same strip-to-`None` normalization for
+  `comment` specifically so a whitespace-only edit clears the field
+  instead of storing `"   "`.
+- **Frontend**: `dorixona.html` gained an "Izoh (ixtiyoriy)" text input in
+  the entry form and an "IZOH" column in the table (pre-existing rows
+  correctly show `—`, since the column is nullable and they predate this
+  change). `dorixona.js` sends `comment` in the create payload
+  (trimmed, `null` if empty) and renders it in the table.
+- **New shared helper, used defensively**: `escapeHtml(value)` added to
+  `nav.js`. Unlike every other field rendered into these tables so far
+  (numbers, dates, short controlled-vocabulary labels), a comment is
+  free-form text a manager could paste anything into, and the table row
+  is built via a raw `innerHTML` template string — without escaping,
+  a comment containing `<`/`>`/quotes would be parsed as markup instead
+  of displayed as text (a stored-XSS risk against whoever views the
+  table next). `dorixona.js`'s comment cell uses it
+  (`entry.comment ? escapeHtml(entry.comment) : "—"`).
+  **Noted, not fixed this session**: `harajatlar.js`'s pre-existing
+  `expense.title` cell has the same unescaped-`innerHTML` shape and was
+  not touched here — it predates this change, isn't part of what was
+  asked, and fixing it belongs in its own change instead of being folded
+  silently into an unrelated feature. Worth a dedicated pass if the user
+  wants it addressed.
+- **Test** (`tests/pharmacy/test_pharmacy.py::test_comment_optional_and_editable`):
+  create with a padded comment strips to the trimmed value; a
+  whitespace-only update clears it to `None`.
+- Verified live (not curl) as the real `Second Manager` account: added a
+  Dorixona entry with a comment through the actual form, confirmed it
+  rendered correctly in the IZOH column and the balance updated, then
+  voided the test entry via the API afterward to avoid leaving it in that
+  account's real data.
+- `pytest -q`: 61/61 (60 + the 1 new comment test).
+
+---
+
+## 24. Session 15 — fixed the stored-XSS gap app-wide, not just in Dorixona
+
+§23 flagged but deliberately didn't fix `harajatlar.js`'s unescaped
+`expense.title` cell as out of scope. User asked what happens if it's
+left unfixed, then asked to fix it — which prompted auditing every
+`innerHTML` table-row template in the app for the same shape, since a
+one-off fix would have left the user with a false sense that "the gap"
+(singular) was closed when the pattern was actually systemic.
+
+- **Every free-text field** (something a manager/superadmin typed in —
+  names, titles, specialties) that gets interpolated into an `innerHTML`
+  template string was found and wrapped in the `escapeHtml()` helper
+  added in §23:
+  - `harajatlar.js` — `expense.title` (the one originally flagged).
+  - `staff.js` — `staff.last_name`/`staff.first_name` (Ishchilar table)
+    and `staff.specialty` (inside the `detail` cell).
+  - `users.js` — `person.username`/`person.full_name` (Managers/
+    Assistants tables).
+  - `navbatchilik.js` — the resolved staff name in the entries table.
+  - `oyliklar.js` — the staff name in both the balance table and the
+    payment-history table.
+  - `reports.js` — `entry.name` in the per-doctor share breakdown table.
+  - `receipts.js` — `doctorLabel` and `creatorLabel`, fixed once where
+    they're computed in `renderRow()` rather than at each of the three
+    (consultation/surgery/room) call sites that use them.
+- **Deliberately left alone**: `audit_log.js`'s `log.action`/
+  `log.resource_type`/`log.resource_id` — these are server-generated from
+  a fixed vocabulary (action names like `"create_expense"`, table names),
+  never free-typed by a user, so there's nothing to escape. Values already
+  passed through `formatMoney`/`formatDate`/`formatDateTime` (numbers,
+  dates) don't need escaping either — flagged in §23 as fine to leave.
+  Dropdown `<option>` population everywhere already used `.textContent =`
+  (browser-escaped by construction), not `innerHTML`, so those were never
+  at risk.
+- **Verified the fix actually blocks execution, not just visually
+  inspected**: created a real staff member via the live Ishchilar form
+  with `first_name = <img src=x onerror=top.title='XSS'>` (as the
+  `Second Manager` account), submitted it, and confirmed the browser
+  tab's title stayed `Ishchilar — Klinika CRM` instead of changing to
+  `XSS` — i.e. the `onerror` handler never fired, because the tag landed
+  in the DOM as escaped text (`&lt;img ...&gt;`) instead of being parsed
+  as a real `<img>` element. Deleted the test staff record afterward
+  (physical delete, since it had no financial/payroll history yet).
+- `node --check` on every touched file: all pass. `pytest -q`: still
+  61/61 (backend untouched this session).

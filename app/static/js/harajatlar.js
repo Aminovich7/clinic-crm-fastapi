@@ -105,7 +105,7 @@
         const tr = document.createElement("tr");
         tr.innerHTML = `
           <td>${formatDate(expense.date)}</td>
-          <td>${expense.title}</td>
+          <td>${escapeHtml(expense.title)}</td>
           <td>${formatMoney(expense.amount)}</td>
           <td class="actions-cell"><button class="danger void-btn" data-id="${expense.id}">Bekor qilish</button></td>
         `;

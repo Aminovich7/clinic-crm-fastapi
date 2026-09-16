@@ -144,7 +144,7 @@
     doctorThead.parentElement.parentElement.classList.remove("hidden");
     (report[key] || []).forEach((entry) => {
       const tr = document.createElement("tr");
-      tr.innerHTML = `<td>${entry.name}</td><td>${formatMoney(entry.total_share)}</td><td>${entry.count}</td>`;
+      tr.innerHTML = `<td>${escapeHtml(entry.name)}</td><td>${formatMoney(entry.total_share)}</td><td>${entry.count}</td>`;
       doctorTbody.appendChild(tr);
     });
   }

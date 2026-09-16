@@ -137,6 +137,20 @@ function moneyInputValue(input) {
   return input.value.replace(/\D/g, "");
 }
 
+// Escapes free-text values (titles, comments, names) before they're
+// interpolated into an innerHTML template string, so a value containing
+// "<", ">", "&", quotes, etc. renders as literal text instead of being
+// parsed as markup.
+function escapeHtml(value) {
+  if (value == null) return "";
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function showError(container, message) {
   container.innerHTML = "";
   const box = document.createElement("div");

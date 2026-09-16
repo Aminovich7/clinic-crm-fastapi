@@ -69,7 +69,7 @@
       items.forEach((row) => {
         const tr = document.createElement("tr");
         tr.innerHTML = `
-          <td>${row.name}</td>
+          <td>${escapeHtml(row.name)}</td>
           <td>${roleLabels[row.role] || row.role}</td>
           <td>${formatMoney(row.earned)}</td>
           <td>${formatMoney(row.paid)}</td>
@@ -151,7 +151,7 @@
         const tr = document.createElement("tr");
         tr.innerHTML = `
           <td>${formatDateTime(payment.paid_at)}</td>
-          <td>${staffNameById[payment.staff_id] || "—"}</td>
+          <td>${escapeHtml(staffNameById[payment.staff_id] || "—")}</td>
           <td>${typeLabels[payment.payment_type] || payment.payment_type}</td>
           <td>${formatDate(payment.period_start)} — ${formatDate(payment.period_end)}</td>
           <td>${formatMoney(payment.amount)}</td>

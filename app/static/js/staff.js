@@ -159,11 +159,11 @@
         }
 
         const detail = staff.role === "doctor"
-          ? (staff.specialty || "—")
+          ? escapeHtml(staff.specialty || "—")
           : (staff.fixed_salary != null ? `${formatMoney(staff.fixed_salary)} so'm` : "—");
 
         tr.innerHTML = `
-          <td>${staff.last_name} ${staff.first_name}</td>
+          <td>${escapeHtml(staff.last_name)} ${escapeHtml(staff.first_name)}</td>
           <td>${roleLabels[staff.role] || staff.role}</td>
           <td>${detail}</td>
           <td>${statusLabels[staff.status] || staff.status}</td>

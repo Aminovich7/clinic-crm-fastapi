@@ -419,8 +419,8 @@
         : "";
     const statusLabel = record.is_voided ? "Bekor qilingan" : "Faol";
     const typeLabel = record.type === "korik" ? "Ko'rik" : "Qayta ko'rik";
-    const doctorLabel = record.doctor_id ? (doctorNameById[record.doctor_id] || "—") : "—";
-    const creatorLabel = creatorNameById[record.created_by_id] || "—";
+    const doctorLabel = escapeHtml(record.doctor_id ? (doctorNameById[record.doctor_id] || "—") : "—");
+    const creatorLabel = escapeHtml(creatorNameById[record.created_by_id] || "—");
     const profitCell = canManage ? `<td>${formatMoney(computeClinicProfit(kind, record))}</td>` : "";
 
     if (kind === "consultation") {

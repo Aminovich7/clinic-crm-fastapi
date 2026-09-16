@@ -31,6 +31,7 @@ async def create_pharmacy_entry(
         date=_resolve_create_date(data.date),
         medicine_cost=data.medicine_cost,
         amount_paid=data.amount_paid,
+        comment=data.comment.strip() if data.comment else None,
         created_by_id=actor.id,
     )
 
@@ -103,6 +104,8 @@ async def update_pharmacy_entry(
         )
 
     for field, value in changes.items():
+        if field == "comment" and isinstance(value, str):
+            value = value.strip() or None
         setattr(pharmacy_entry, field, value)
 
     await record_audit_event(

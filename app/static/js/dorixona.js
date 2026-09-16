@@ -68,6 +68,7 @@
       date: document.getElementById("date").value || null,
       medicine_cost: moneyInputValue(document.getElementById("medicine_cost")) || null,
       amount_paid: moneyInputValue(document.getElementById("amount_paid")) || null,
+      comment: document.getElementById("comment").value.trim() || null,
     };
 
     try {
@@ -110,6 +111,7 @@
           <td>${formatDate(entry.date)}</td>
           <td>${entry.medicine_cost != null ? formatMoney(entry.medicine_cost) : "—"}</td>
           <td>${entry.amount_paid != null ? formatMoney(entry.amount_paid) : "—"}</td>
+          <td>${entry.comment ? escapeHtml(entry.comment) : "—"}</td>
           <td class="actions-cell"><button class="danger void-btn" data-id="${entry.id}">Bekor qilish</button></td>
         `;
         tbody.appendChild(tr);

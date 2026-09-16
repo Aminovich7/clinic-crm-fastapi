@@ -5,10 +5,11 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.pharmacy.schemas import PharmacyEntryCreate
+from app.pharmacy.schemas import PharmacyEntryCreate, PharmacyEntryUpdate
 from app.pharmacy.service import (
     build_pharmacy_balance,
     create_pharmacy_entry,
+    update_pharmacy_entry,
     void_pharmacy_entry,
 )
 from app.users.models import User, UserRoleEnum
@@ -29,6 +30,7 @@ class TestPharmacyEntries:
         )
         assert entry.medicine_cost == 500
         assert entry.amount_paid is None
+        assert entry.comment is None
 
         voided = await void_pharmacy_entry(seeded_db, actor=actor, pharmacy_entry=entry)
         assert voided.is_voided is True
@@ -36,6 +38,24 @@ class TestPharmacyEntries:
     def test_not_both_null_rejected(self):
         with pytest.raises(ValueError):
             PharmacyEntryCreate()
+
+    async def test_comment_optional_and_editable(self, seeded_db: AsyncSession):
+        actor = await _get_superadmin(seeded_db)
+
+        entry = await create_pharmacy_entry(
+            seeded_db,
+            actor=actor,
+            data=PharmacyEntryCreate(medicine_cost=300, comment="  Ibuprofen  "),
+        )
+        assert entry.comment == "Ibuprofen"
+
+        updated = await update_pharmacy_entry(
+            seeded_db,
+            actor=actor,
+            pharmacy_entry=entry,
+            data=PharmacyEntryUpdate(comment="  "),
+        )
+        assert updated.comment is None
 
     async def test_balance_positive_when_paid_exceeds_cost(self, seeded_db: AsyncSession):
         actor = await _get_superadmin(seeded_db)

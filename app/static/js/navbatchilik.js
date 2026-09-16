@@ -99,7 +99,7 @@
         const tr = document.createElement("tr");
         tr.innerHTML = `
           <td>${formatDate(entry.date)}</td>
-          <td>${staffNameById[entry.staff_id] || "—"}</td>
+          <td>${escapeHtml(staffNameById[entry.staff_id] || "—")}</td>
           <td>${formatMoney(entry.amount)}</td>
           <td class="actions-cell"><button class="danger void-btn" data-id="${entry.id}">Bekor qilish</button></td>
         `;
