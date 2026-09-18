@@ -13,7 +13,7 @@
 </div>
 
 <!-- Consultation form -->
-<div class="card tab-panel" id="panel-consultation">
+<div class="card entry-card tab-panel" id="panel-consultation">
   <h2 id="c_form_title">Yangi ko'rik</h2>
   <form class="inline-form" id="consultation-form">
     <input type="hidden" id="c_id">
@@ -55,7 +55,7 @@
 </div>
 
 <!-- Surgery form -->
-<div class="card tab-panel hidden" id="panel-surgery">
+<div class="card entry-card tab-panel hidden" id="panel-surgery">
   <h2 id="s_form_title">Yangi operatsiya</h2>
   <form class="inline-form" id="surgery-form">
     <input type="hidden" id="s_id">
@@ -90,7 +90,7 @@
 </div>
 
 <!-- Room form -->
-<div class="card tab-panel hidden" id="panel-room">
+<div class="card entry-card tab-panel hidden" id="panel-room">
   <h2 id="r_form_title">Yangi xona</h2>
   <form class="inline-form" id="room-form">
     <input type="hidden" id="r_id">
@@ -140,8 +140,11 @@
       <select id="filter_creator"></select>
     </div>
     <button type="submit">Filtrlash</button>
+    <button type="button" class="secondary" id="current-month-btn">Joriy oy</button>
+    <button type="button" class="secondary" id="previous-month-btn">O'tgan oy</button>
     <button type="button" class="secondary" id="filter-clear-btn">Tozalash</button>
   </form>
+  <p class="muted" id="period-label"></p>
 </div>
 <div class="table-wrap">
   <table>

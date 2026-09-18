@@ -2,18 +2,37 @@
 // the logout button. Called by every authenticated page after its own
 // data-loading logic is set up.
 
-const NAV_LINKS = [
-  { href: "/dashboard", label: "Boshqaruv paneli", roles: ["superadmin", "manager"] },
-  { href: "/receipts", label: "Kvitansiyalar", roles: ["superadmin", "manager", "assistant"] },
-  { href: "/reports", label: "Hisobotlar", roles: ["superadmin", "manager"] },
-  { href: "/staff-page", label: "Ishchilar", roles: ["superadmin", "manager"] },
-  { href: "/navbatchilik-page", label: "Navbatchilik", roles: ["superadmin", "manager"] },
-  { href: "/salary-page", label: "Oyliklar", roles: ["superadmin", "manager"] },
-  { href: "/pharmacy-page", label: "Dorixona", roles: ["superadmin", "manager"] },
-  { href: "/expenses-page", label: "Boshqa harajatlar", roles: ["superadmin", "manager"] },
-  { href: "/users-page", label: "Foydalanuvchilar", roles: ["superadmin", "manager"] },
-  { href: "/audit-log", label: "Audit jurnali", roles: ["superadmin"] },
-  { href: "/settings", label: "Sozlamalar", roles: ["superadmin"] },
+// Nav is grouped so that eleven links stay scannable. A flat row of eleven
+// needed ~1590px of header and silently wrapped onto a second and third row
+// on any laptop-sized screen; a grouped sidebar also separates the pages used
+// a hundred times a day from the ones touched twice a year.
+const NAV_GROUPS = [
+  {
+    label: "Umumiy",
+    links: [
+      { href: "/dashboard", label: "Boshqaruv paneli", roles: ["superadmin", "manager"] },
+      { href: "/reports", label: "Hisobotlar", roles: ["superadmin", "manager"] },
+      { href: "/salary-page", label: "Oyliklar", roles: ["superadmin", "manager"] },
+      { href: "/pharmacy-page", label: "Dorixona", roles: ["superadmin", "manager"] },
+    ],
+  },
+  {
+    label: "Asosiy",
+    links: [
+      { href: "/receipts", label: "Kvitansiyalar", roles: ["superadmin", "manager", "assistant"] },
+      { href: "/navbatchilik-page", label: "Navbatchilik", roles: ["superadmin", "manager"] },
+      { href: "/expenses-page", label: "Boshqa harajatlar", roles: ["superadmin", "manager"] },
+      { href: "/staff-page", label: "Ishchilar", roles: ["superadmin", "manager"] },
+    ],
+  },
+  {
+    label: "Tizim",
+    links: [
+      { href: "/users-page", label: "Foydalanuvchilar", roles: ["superadmin", "manager"] },
+      { href: "/audit-log", label: "Bekor qilingan yozuvlar", roles: ["superadmin"] },
+      { href: "/settings", label: "Sozlamalar", roles: ["superadmin"] },
+    ],
+  },
 ];
 
 const ROLE_LABELS = {
@@ -43,19 +62,56 @@ async function initPage({ allowedRoles = null } = {}) {
     return null;
   }
 
+  // Each page template supplies its own <h1>; hoist it into the sticky top
+  // bar so every screen gets a consistent page header without editing all
+  // twelve templates.
+  const titleEl = document.getElementById("page-title");
+  const pageHeading = document.querySelector("main.container > h1");
+  if (titleEl && pageHeading) {
+    titleEl.textContent = pageHeading.textContent;
+    pageHeading.remove();
+  } else if (titleEl) {
+    titleEl.textContent = document.title.split("—")[0].trim();
+  }
+
   const nav = document.getElementById("mainnav");
+  const currentPath = window.location.pathname;
+  let visibleLinkCount = 0;
+
   if (nav) {
     nav.innerHTML = "";
-    const currentPath = window.location.pathname;
-    NAV_LINKS.filter((link) => link.roles.includes(user.role)).forEach((link) => {
-      const a = document.createElement("a");
-      a.href = link.href;
-      a.textContent = link.label;
-      if (link.href === currentPath) {
-        a.classList.add("active");
-      }
-      nav.appendChild(a);
+    NAV_GROUPS.forEach((group) => {
+      const links = group.links.filter((link) => link.roles.includes(user.role));
+      if (links.length === 0) return; // a group with nothing in it doesn't render
+
+      const section = document.createElement("div");
+      section.className = "nav-group";
+
+      const label = document.createElement("div");
+      label.className = "nav-group-label";
+      label.textContent = group.label;
+      section.appendChild(label);
+
+      links.forEach((link) => {
+        const a = document.createElement("a");
+        a.href = link.href;
+        a.textContent = link.label;
+        if (link.href === currentPath) {
+          a.classList.add("active");
+          a.setAttribute("aria-current", "page");
+        }
+        section.appendChild(a);
+        visibleLinkCount += 1;
+      });
+
+      nav.appendChild(section);
     });
+  }
+
+  // A nav holding a single link pointing at the page you're already on is
+  // pure chrome — assistants get the content area full-width instead.
+  if (visibleLinkCount <= 1) {
+    document.body.classList.add("no-sidebar");
   }
 
   const nameEl = document.getElementById("current-user-name");
@@ -157,6 +213,149 @@ function showError(container, message) {
   box.className = "error-box";
   box.textContent = message;
   container.appendChild(box);
+}
+
+// Renders a centered "nothing here" row so that a filter matching zero
+// records is visibly distinct from a failed request or a half-loaded page.
+// `colspan` should match the table's current column count — pass the same
+// header array length the thead was built from.
+function renderEmpty(tbody, colspan, message) {
+  tbody.innerHTML = "";
+  const tr = document.createElement("tr");
+  tr.className = "table-empty";
+  const td = document.createElement("td");
+  td.colSpan = colspan;
+  td.textContent = message || "Ma'lumot topilmadi";
+  tr.appendChild(td);
+  tbody.appendChild(tr);
+}
+
+// Dims a table (or any container) while its data is in flight, so lists fade
+// rather than flashing empty and then repopulating.
+function setLoading(element, isLoading) {
+  if (!element) return;
+  element.classList.toggle("is-loading", Boolean(isLoading));
+}
+
+// Runs an async load with the loading state applied for its duration. The
+// `finally` matters: without it a failed request would leave the table dimmed
+// and pointer-events:none forever.
+async function withLoading(element, run) {
+  setLoading(element, true);
+  try {
+    return await run();
+  } finally {
+    setLoading(element, false);
+  }
+}
+
+// Column count for whichever table body is being rendered, read off the
+// matching thead so the empty row always spans the full width.
+function columnCount(tableEl) {
+  if (!tableEl) return 1;
+  const head = tableEl.querySelector("thead tr");
+  return head ? head.children.length : 1;
+}
+
+// --- Voided-record actions ----------------------------------------------
+// Restore and hard delete are superadmin-only and only ever apply to records
+// that are already voided, so both buttons render together or not at all.
+
+function canManageVoided(user) {
+  return user.role === "superadmin";
+}
+
+// `extraAttrs` lets a page attach whatever it needs to identify the record
+// (Kvitansiyalar passes data-kind, since one table serves three resources).
+function voidedActionButtons(user, record, extraAttrs = "") {
+  if (!canManageVoided(user) || !record.is_voided) return "";
+  return (
+    `<button class="secondary restore-btn" ${extraAttrs} data-id="${record.id}">Tiklash</button>` +
+    `<button class="danger delete-btn" ${extraAttrs} data-id="${record.id}">O'chirish</button>`
+  );
+}
+
+const RESTORE_CONFIRM =
+  "Ushbu yozuvni tiklaysizmi? U yana hisobotlarga qo'shiladi.";
+
+const DELETE_CONFIRM =
+  "Ushbu yozuvni butunlay o'chirasizmi?\n\n" +
+  "Bu amalni QAYTARIB BO'LMAYDI. Yozuv ma'lumotlar bazasidan butunlay " +
+  "o'chiriladi va uning ma'lumotlari hech qayerda saqlanmaydi.";
+
+// --- Calendar-month range shortcuts -------------------------------------
+// Shared by every page with a date-range filter ("Joriy oy" / "O'tgan oy").
+// Local calendar arithmetic only, with no UTC round-trip, so the range is
+// the clinic's actual month regardless of the viewer's time zone.
+
+// offsetMonths=0 is the current month, -1 the previous one.
+function firstAndLastOfMonth(offsetMonths) {
+  const now = new Date();
+  const first = new Date(now.getFullYear(), now.getMonth() + offsetMonths, 1);
+  const last = new Date(now.getFullYear(), now.getMonth() + offsetMonths + 1, 0);
+  const toInputValue = (d) => {
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  };
+  return { from: toInputValue(first), to: toInputValue(last) };
+}
+
+// month is 1-indexed; day 0 of the "next" month rolls back to the last day
+// of this one.
+function daysInMonth(year, month) {
+  return new Date(year, month, 0).getDate();
+}
+
+// "Davr: Sentabr 2026" when the range is exactly one calendar month,
+// otherwise the explicit "Davr: 05-Sentabr-2026 — 18-Sentabr-2026".
+function monthPeriodLabel(fromVal, toVal) {
+  if (!fromVal || !toVal) return "";
+
+  const [fromYear, fromMonth, fromDay] = fromVal.split("-").map(Number);
+  const [toYear, toMonth, toDay] = toVal.split("-").map(Number);
+  const isFullCalendarMonth =
+    fromDay === 1 &&
+    fromYear === toYear &&
+    fromMonth === toMonth &&
+    toDay === daysInMonth(toYear, toMonth);
+
+  return isFullCalendarMonth
+    ? `Davr: ${UZ_MONTHS[fromMonth - 1]} ${fromYear}`
+    : `Davr: ${formatDate(fromVal)} — ${formatDate(toVal)}`;
+}
+
+// Wires the two shortcut buttons and keeps the visible period label in sync
+// with whatever is actually in the date inputs — including ranges the user
+// types by hand, so the label can never disagree with the query.
+function attachMonthShortcuts({
+  fromInput,
+  toInput,
+  currentBtn,
+  previousBtn,
+  labelEl,
+  onApply,
+}) {
+  if (!fromInput || !toInput) return null;
+
+  function refreshLabel() {
+    if (labelEl) labelEl.textContent = monthPeriodLabel(fromInput.value, toInput.value);
+  }
+
+  function apply(offsetMonths) {
+    const { from, to } = firstAndLastOfMonth(offsetMonths);
+    fromInput.value = from;
+    toInput.value = to;
+    refreshLabel();
+    if (onApply) onApply();
+  }
+
+  if (currentBtn) currentBtn.addEventListener("click", () => apply(0));
+  if (previousBtn) previousBtn.addEventListener("click", () => apply(-1));
+  fromInput.addEventListener("change", refreshLabel);
+  toInput.addEventListener("change", refreshLabel);
+  refreshLabel();
+
+  return { apply, refreshLabel };
 }
 
 function paginationLabel(data) {

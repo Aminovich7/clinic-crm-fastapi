@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.pagination import PaginatedResponse
+from app.common.voidable import hard_delete_voided_record, restore_voided_record
 from app.db.session import get_db
 from app.expenses.schemas import ExpenseCreate, ExpenseRead, ExpenseSummary, ExpenseUpdate
 from app.expenses.service import (
@@ -38,12 +39,12 @@ async def list_expenses_endpoint(
     search: str | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
-    _: User = Depends(require_roles(*MANAGE_ROLES)),
+    actor: User = Depends(require_roles(*MANAGE_ROLES)),
     db: AsyncSession = Depends(get_db),
 ):
     try:
         items, total = await list_expenses(
-            db, date_from=date_from, date_to=date_to, search=search, page=page, page_size=page_size
+            db, date_from=date_from, date_to=date_to, search=search, page=page, page_size=page_size,
         )
     except ValueError as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc))
@@ -94,3 +95,39 @@ async def void_expense_endpoint(
 ):
     record = await get_expense_or_404(db, expense_id)
     return await void_expense(db, actor=actor, expense=record)
+
+
+@router.post("/{expense_id}/restore", response_model=ExpenseRead)
+async def restore_expense_endpoint(
+    expense_id: int,
+    actor: User = Depends(require_roles(UserRoleEnum.SUPERADMIN)),
+    db: AsyncSession = Depends(get_db),
+):
+    record = await get_expense_or_404(db, expense_id)
+    return await restore_voided_record(
+        db,
+        actor=actor,
+        obj=record,
+        action="restore_expense",
+        resource_type="expense",
+    )
+
+
+@router.delete("/{expense_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_expense_endpoint(
+    expense_id: int,
+    actor: User = Depends(require_roles(UserRoleEnum.SUPERADMIN)),
+    db: AsyncSession = Depends(get_db),
+):
+    """Permanently delete an already-voided record (superadmin only).
+
+    The full row is written into the audit log before it is destroyed.
+    """
+    record = await get_expense_or_404(db, expense_id)
+    await hard_delete_voided_record(
+        db,
+        actor=actor,
+        obj=record,
+        action="delete_expense",
+        resource_type="expense",
+    )

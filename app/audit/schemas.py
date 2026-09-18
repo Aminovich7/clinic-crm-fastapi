@@ -1,16 +1,17 @@
-import uuid
 from datetime import datetime
+from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel
 
 
-class AuditLogRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+class VoidedRecordRead(BaseModel):
+    """One voided record, normalised across the seven voidable tables."""
 
-    id: int
-    actor_id: uuid.UUID | None
-    action: str
     resource_type: str
-    resource_id: str
-    metadata_: dict | None
-    created_at: datetime
+    resource_label: str
+    id: int
+    summary: str
+    date: datetime | None
+    amount: Decimal | None
+    voided_at: datetime | None
+    voided_by_name: str | None

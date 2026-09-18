@@ -52,31 +52,14 @@
 
   // --- Balance ---
 
-  // Local calendar-month arithmetic only (no UTC round-trip), so this is
-  // correct regardless of the viewer's time zone. offsetMonths=0 is the
-  // current month, -1 the previous month, etc.
-  function firstAndLastOfMonth(offsetMonths) {
-    const now = new Date();
-    const first = new Date(now.getFullYear(), now.getMonth() + offsetMonths, 1);
-    const last = new Date(now.getFullYear(), now.getMonth() + offsetMonths + 1, 0);
-    const toInputValue = (d) => {
-      const pad = (n) => String(n).padStart(2, "0");
-      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-    };
-    return { from: toInputValue(first), to: toInputValue(last) };
-  }
-
+  // firstAndLastOfMonth() and daysInMonth() now live in nav.js, shared with
+  // the month shortcuts on Boshqaruv paneli, Hisobotlar, Kvitansiyalar,
+  // Navbatchilik, Dorixona and Boshqa harajatlar.
   function applyMonthShortcut(offsetMonths) {
     const { from, to } = firstAndLastOfMonth(offsetMonths);
     document.getElementById("balance_from").value = from;
     document.getElementById("balance_to").value = to;
     loadBalance();
-  }
-
-  function daysInMonth(year, month) {
-    // month is 1-indexed; day 0 of the "next" month rolls back to the
-    // last day of this one.
-    return new Date(year, month, 0).getDate();
   }
 
   // Always reflects whatever range loadBalance() is about to query,
@@ -127,15 +110,19 @@
     if (to) params.set("date_to", to);
 
     try {
-      const items = await apiFetch(`/salary/balance?${params.toString()}`);
+      const items = await withLoading(tbody.closest("table"), () => apiFetch(`/salary/balance?${params.toString()}`));
+      if (items.length === 0) {
+        renderEmpty(tbody, columnCount(tbody.closest("table")), "Bu davr uchun ma'lumot yo'q");
+        return;
+      }
       items.forEach((row) => {
         const tr = document.createElement("tr");
         tr.innerHTML = `
           <td>${escapeHtml(row.name)}</td>
           <td>${roleLabels[row.role] || row.role}</td>
-          <td>${formatMoney(row.earned)}</td>
-          <td>${formatMoney(row.paid)}</td>
-          <td>${formatMoney(row.remaining)}</td>
+          <td class="num">${formatMoney(row.earned)}</td>
+          <td class="num">${formatMoney(row.paid)}</td>
+          <td class="num">${formatMoney(row.remaining)}</td>
         `;
         tbody.appendChild(tr);
       });
@@ -188,6 +175,7 @@
     }
   }
 
+
   async function loadHistory() {
     const tbody = document.getElementById("history-tbody");
     const pagination = document.getElementById("history-pagination");
@@ -204,8 +192,11 @@
     if (to) params.set("date_to", to);
 
     try {
-      const data = await apiFetch(`/salary/payments?${params.toString()}`);
+      const data = await withLoading(tbody.closest("table"), () => apiFetch(`/salary/payments?${params.toString()}`));
 
+      if (data.items.length === 0) {
+        renderEmpty(tbody, columnCount(tbody.closest("table")), "Ma'lumot topilmadi");
+      }
       data.items.forEach((payment) => {
         const tr = document.createElement("tr");
         tr.innerHTML = `
@@ -213,7 +204,7 @@
           <td>${escapeHtml(staffNameById[payment.staff_id] || "—")}</td>
           <td>${typeLabels[payment.payment_type] || payment.payment_type}</td>
           <td>${formatDate(payment.period_start)} — ${formatDate(payment.period_end)}</td>
-          <td>${formatMoney(payment.amount)}</td>
+          <td class="num">${formatMoney(payment.amount)}</td>
           <td class="actions-cell"><button class="danger void-btn" data-id="${payment.id}">Bekor qilish</button></td>
         `;
         tbody.appendChild(tr);
@@ -244,10 +235,12 @@
   });
 
   // --- Lifetime summary ---
-  function statCard(label, value) {
+  function statCard(label, value, variant) {
     const div = document.createElement("div");
-    div.className = "stat-card";
-    div.innerHTML = `<div class="label">${label}</div><div class="value">${formatMoney(value)}</div>`;
+    div.className = `stat-card${variant ? ` stat-card--${variant}` : ""}`;
+    div.innerHTML =
+      `<div class="label">${label}</div>` +
+      `<div class="value">${formatMoney(value)}<span class="unit">so'm</span></div>`;
     return div;
   }
 
@@ -262,9 +255,9 @@
 
     try {
       const summary = await apiFetch(`/salary/staff/${staffId}/summary`);
-      cards.appendChild(statCard("Umumiy ishlab topgani", summary.lifetime_earned));
-      cards.appendChild(statCard("Umumiy to'langan", summary.lifetime_paid));
-      cards.appendChild(statCard("Qoldiq", summary.lifetime_remaining));
+      cards.appendChild(statCard("Umumiy ishlab topgani", summary.lifetime_earned, "primary"));
+      cards.appendChild(statCard("Umumiy to'langan", summary.lifetime_paid, "warning"));
+      cards.appendChild(statCard("Qoldiq", summary.lifetime_remaining, "success"));
     } catch (err) {
       showError(errorContainer, err.detail || err.message || "Statistikani yuklashda xatolik");
     }

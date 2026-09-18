@@ -82,6 +82,7 @@
     }
   }
 
+
   async function loadDutyEntries() {
     clearMessages();
     tbody.innerHTML = "";
@@ -93,14 +94,17 @@
     if (dateTo) params.set("date_to", dateTo);
 
     try {
-      const data = await apiFetch(`/duty-entries?${params.toString()}`);
+      const data = await withLoading(tbody.closest("table"), () => apiFetch(`/duty-entries?${params.toString()}`));
 
+      if (data.items.length === 0) {
+        renderEmpty(tbody, columnCount(tbody.closest("table")), "Ma'lumot topilmadi");
+      }
       data.items.forEach((entry) => {
         const tr = document.createElement("tr");
         tr.innerHTML = `
           <td>${formatDate(entry.date)}</td>
           <td>${escapeHtml(staffNameById[entry.staff_id] || "—")}</td>
-          <td>${formatMoney(entry.amount)}</td>
+          <td class="num">${formatMoney(entry.amount)}</td>
           <td class="actions-cell"><button class="danger void-btn" data-id="${entry.id}">Bekor qilish</button></td>
         `;
         tbody.appendChild(tr);
@@ -131,6 +135,23 @@
     dateTo = document.getElementById("date_to").value;
     page = 1;
     loadDutyEntries();
+  });
+
+  attachMonthShortcuts({
+    fromInput: document.getElementById("date_from"),
+    toInput: document.getElementById("date_to"),
+    currentBtn: document.getElementById("current-month-btn"),
+    previousBtn: document.getElementById("previous-month-btn"),
+    labelEl: document.getElementById("period-label"),
+    // This page keeps the active filter in module-level state that only the
+    // submit handler refreshes, so the shortcut has to update it too.
+    onApply: () => {
+      staffFilter = filterStaffSelect.value;
+      dateFrom = document.getElementById("date_from").value;
+      dateTo = document.getElementById("date_to").value;
+      page = 1;
+      loadDutyEntries();
+    },
   });
 
   await loadStaffOptions();

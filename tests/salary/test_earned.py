@@ -84,3 +84,112 @@ class TestComputeEarnedAmount:
         )
         # Full February (28 days) of 2,800,000 == 2,800,000 exactly, plus duty 15000
         assert earned == Decimal("2815000")
+
+
+@pytest.mark.asyncio
+class TestHireDateClamping:
+    """Fixed-salary staff must not accrue anything before their hire date.
+
+    Regression coverage for a real reported case: a staff member hired
+    2026-09-17 on a 50,000,000 fixed salary showed a full 50,000,000 as owed
+    when the Oyliklar balance was filtered to the *previous* month, because
+    compute_earned_amount() prorated across the requested range without ever
+    consulting hire_date.
+    """
+
+    async def _hire(self, db: AsyncSession, *, hire_date: date, salary: int):
+        actor = await _get_superadmin(db)
+        return await create_staff(
+            db,
+            actor=actor,
+            data=StaffCreate(
+                role=StaffRoleEnum.OTHER,
+                first_name="Mehroj",
+                last_name="Hamraev",
+                fixed_salary=Decimal(salary),
+                hire_date=hire_date,
+            ),
+        )
+
+    async def test_month_entirely_before_hire_earns_nothing(self, seeded_db: AsyncSession):
+        staff = await self._hire(seeded_db, hire_date=date(2026, 9, 17), salary=50_000_000)
+
+        earned = await compute_earned_amount(
+            seeded_db,
+            staff=staff,
+            date_from=date(2026, 8, 1),
+            date_to=date(2026, 8, 31),
+        )
+
+        assert earned == Decimal("0")
+
+    async def test_hire_month_is_prorated_from_hire_date(self, seeded_db: AsyncSession):
+        staff = await self._hire(seeded_db, hire_date=date(2026, 9, 17), salary=50_000_000)
+
+        earned = await compute_earned_amount(
+            seeded_db,
+            staff=staff,
+            date_from=date(2026, 9, 1),
+            date_to=date(2026, 9, 30),
+        )
+
+        # 17-30 September is 14 of the month's 30 days:
+        # 50,000,000 / 30 * 14 = 23,333,333.33 -> 23,333,333
+        assert earned == Decimal("23333333")
+
+    async def test_month_fully_after_hire_is_unaffected(self, seeded_db: AsyncSession):
+        staff = await self._hire(seeded_db, hire_date=date(2026, 9, 17), salary=50_000_000)
+
+        earned = await compute_earned_amount(
+            seeded_db,
+            staff=staff,
+            date_from=date(2026, 10, 1),
+            date_to=date(2026, 10, 31),
+        )
+
+        assert earned == Decimal("50000000")
+
+    async def test_range_starting_before_hire_counts_only_worked_days(
+        self, seeded_db: AsyncSession
+    ):
+        """A range spanning the hire date is clamped, not zeroed."""
+        staff = await self._hire(seeded_db, hire_date=date(2026, 9, 17), salary=50_000_000)
+
+        earned = await compute_earned_amount(
+            seeded_db,
+            staff=staff,
+            date_from=date(2026, 8, 1),
+            date_to=date(2026, 9, 30),
+        )
+
+        # August contributes nothing; only 17-30 September counts.
+        assert earned == Decimal("23333333")
+
+    async def test_staff_without_hire_date_is_not_clamped(self, seeded_db: AsyncSession):
+        """No hire_date means "unknown", never "hired on the day I was typed in".
+
+        created_at is a data-entry timestamp. Falling back to it would quietly
+        reduce the pay owed to long-standing staff whose CRM record happens to
+        be recent, so an absent hire_date leaves earnings un-clamped.
+        """
+        actor = await _get_superadmin(seeded_db)
+        staff = await create_staff(
+            seeded_db,
+            actor=actor,
+            data=StaffCreate(
+                role=StaffRoleEnum.OTHER,
+                first_name="No",
+                last_name="Hiredate",
+                fixed_salary=Decimal("2800000"),
+            ),
+        )
+        assert staff.hire_date is None
+
+        earned = await compute_earned_amount(
+            seeded_db,
+            staff=staff,
+            date_from=date(2026, 2, 1),
+            date_to=date(2026, 2, 28),
+        )
+
+        assert earned == Decimal("2800000")

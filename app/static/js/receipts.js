@@ -370,6 +370,13 @@
     room: ["Chek raqami", "Sana", "Shifokor", "Qo'shdi", "Summa", "Shifokor foizi", "Holati", "Amallar"],
   };
 
+  // Money and percentage columns are right-aligned with tabular figures;
+  // "Chek raqami" stays left-aligned because it's an identifier, not a
+  // quantity, and nothing is gained by comparing receipt numbers vertically.
+  const NUMERIC_HEADERS = new Set([
+    "Summa", "Shifokor foizi", "Xarajat", "Shifokor ulushi", "Klinika foydasi",
+  ]);
+
   function headersFor(kind) {
     const headers = [...BASE_HEADERS[kind]];
     if (canManage) {
@@ -402,7 +409,7 @@
   }
 
   async function voidRecord(kind, id) {
-    if (!confirm("Ushbu yozuvni bekor qilasizmi? Bu amalni qaytarib bo'lmaydi.")) return;
+    if (!confirm("Ushbu yozuvni bekor qilasizmi? Keyinchalik uni tiklash mumkin.")) return;
     clearMessages();
     try {
       await apiFetch(`${ENDPOINTS[kind]}/${id}/void`, { method: "POST" });
@@ -430,8 +437,8 @@
     const typeLabel = record.type === "korik" ? "Ko'rik" : "Qayta ko'rik";
     const doctorLabel = escapeHtml(record.doctor_id ? (doctorNameById[record.doctor_id] || "—") : "—");
     const creatorLabel = escapeHtml(creatorNameById[record.created_by_id] || "—");
-    const shareCell = canManage ? `<td>${formatMoney(computeDoctorShare(kind, record))}</td>` : "";
-    const profitCell = canManage ? `<td>${formatMoney(computeClinicProfit(kind, record))}</td>` : "";
+    const shareCell = canManage ? `<td class="num">${formatMoney(computeDoctorShare(kind, record))}</td>` : "";
+    const profitCell = canManage ? `<td class="num">${formatMoney(computeClinicProfit(kind, record))}</td>` : "";
 
     if (kind === "consultation") {
       tr.innerHTML = `
@@ -440,9 +447,9 @@
         <td>${typeLabel}</td>
         <td>${doctorLabel}</td>
         <td>${creatorLabel}</td>
-        <td>${formatMoney(record.amount)}</td>
-        <td>${formatMoney(record.doctor_percent)}%</td>
-        <td>${formatMoney(record.minus_beshming ?? 0)}</td>
+        <td class="num">${formatMoney(record.amount)}</td>
+        <td class="num">${formatMoney(record.doctor_percent)}%</td>
+        <td class="num">${formatMoney(record.minus_beshming ?? 0)}</td>
         ${shareCell}
         ${profitCell}
         <td>${statusLabel}</td>
@@ -454,9 +461,9 @@
         <td>${dateStr}</td>
         <td>${doctorLabel}</td>
         <td>${creatorLabel}</td>
-        <td>${formatMoney(record.amount)}</td>
-        <td>${formatMoney(record.doctor_percent)}%</td>
-        <td>${formatMoney(record.surgery_expense)}</td>
+        <td class="num">${formatMoney(record.amount)}</td>
+        <td class="num">${formatMoney(record.doctor_percent)}%</td>
+        <td class="num">${formatMoney(record.surgery_expense)}</td>
         ${shareCell}
         ${profitCell}
         <td>${statusLabel}</td>
@@ -468,8 +475,8 @@
         <td>${dateStr}</td>
         <td>${doctorLabel}</td>
         <td>${creatorLabel}</td>
-        <td>${formatMoney(record.amount)}</td>
-        <td>${formatMoney(record.doctor_percent)}%</td>
+        <td class="num">${formatMoney(record.amount)}</td>
+        <td class="num">${formatMoney(record.doctor_percent)}%</td>
         ${shareCell}
         ${profitCell}
         <td>${statusLabel}</td>
@@ -491,20 +498,39 @@
     loadRecent();
   });
 
+  const monthShortcuts = attachMonthShortcuts({
+    fromInput: filterDateFromInput,
+    toInput: filterDateToInput,
+    currentBtn: document.getElementById("current-month-btn"),
+    previousBtn: document.getElementById("previous-month-btn"),
+    labelEl: document.getElementById("period-label"),
+    onApply: () => {
+      page = 1;
+      loadRecent();
+    },
+  });
+
   document.getElementById("filter-clear-btn").addEventListener("click", () => {
     filterDateFromInput.value = "";
     filterDateToInput.value = "";
     filterDoctorSelect.value = "";
     if (filterCreatorSelect) filterCreatorSelect.value = "";
+    // Clearing the dates has to clear the period label too, or it would keep
+    // advertising a range that is no longer being queried.
+    if (monthShortcuts) monthShortcuts.refreshLabel();
     page = 1;
     loadRecent();
   });
+
 
   async function loadRecent() {
     clearMessages();
     recentTbody.innerHTML = "";
     pagination.innerHTML = "";
-    recentThead.innerHTML = `<tr>${headersFor(activeTab).map((h) => `<th>${h}</th>`).join("")}</tr>`;
+    const headers = headersFor(activeTab);
+    recentThead.innerHTML = `<tr>${headers
+      .map((h) => `<th${NUMERIC_HEADERS.has(h) ? ' class="num"' : ""}>${h}</th>`)
+      .join("")}</tr>`;
 
     const params = new URLSearchParams({ page, page_size: pageSize });
     if (filterDateFromInput.value) params.set("date_from", filterDateFromInput.value);
@@ -512,9 +538,14 @@
     if (filterDoctorSelect.value) params.set("doctor_id", filterDoctorSelect.value);
     if (canManage && filterCreatorSelect.value) params.set("created_by_id", filterCreatorSelect.value);
     try {
-      const data = await apiFetch(`${ENDPOINTS[activeTab]}?${params.toString()}`);
+      const data = await withLoading(recentTbody.closest("table"), () => apiFetch(`${ENDPOINTS[activeTab]}?${params.toString()}`));
       lastLoadedItems = data.items;
-      data.items.forEach((record) => recentTbody.appendChild(renderRow(activeTab, record)));
+
+      if (data.items.length === 0) {
+        renderEmpty(recentTbody, headers.length, "Bu filtr bo'yicha yozuv topilmadi");
+      } else {
+        data.items.forEach((record) => recentTbody.appendChild(renderRow(activeTab, record)));
+      }
 
       recentTbody.querySelectorAll(".void-btn").forEach((btn) => {
         btn.addEventListener("click", () => voidRecord(btn.dataset.kind, btn.dataset.id));

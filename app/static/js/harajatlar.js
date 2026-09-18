@@ -31,10 +31,14 @@
     successContainer.appendChild(box);
   }
 
-  function statCard(label, value) {
+  // `unit` is omitted for plain counts — "Yozuvlar soni" is a number of
+  // records, not an amount of money.
+  function statCard(label, value, variant, unit = "so'm") {
     const div = document.createElement("div");
-    div.className = "stat-card";
-    div.innerHTML = `<div class="label">${label}</div><div class="value">${formatMoney(value)}</div>`;
+    div.className = `stat-card${variant ? ` stat-card--${variant}` : ""}`;
+    div.innerHTML =
+      `<div class="label">${label}</div>` +
+      `<div class="value">${formatMoney(value)}${unit ? `<span class="unit">${unit}</span>` : ""}</div>`;
     return div;
   }
 
@@ -50,8 +54,8 @@
     summaryCards.innerHTML = "";
     try {
       const summary = await apiFetch(`/expenses/summary?${currentParams().toString()}`);
-      summaryCards.appendChild(statCard("Jami summa", summary.total_amount));
-      summaryCards.appendChild(statCard("Yozuvlar soni", summary.count));
+      summaryCards.appendChild(statCard("Jami summa", summary.total_amount, "warning"));
+      summaryCards.appendChild(statCard("Yozuvlar soni", summary.count, "primary", ""));
     } catch (err) {
       showError(errorContainer, err.detail || err.message || "Statistikani yuklashda xatolik");
     }
@@ -89,6 +93,7 @@
     }
   }
 
+
   async function loadExpenses() {
     clearMessages();
     tbody.innerHTML = "";
@@ -99,14 +104,17 @@
     params.set("page_size", pageSize);
 
     try {
-      const data = await apiFetch(`/expenses?${params.toString()}`);
+      const data = await withLoading(tbody.closest("table"), () => apiFetch(`/expenses?${params.toString()}`));
 
+      if (data.items.length === 0) {
+        renderEmpty(tbody, columnCount(tbody.closest("table")), "Ma'lumot topilmadi");
+      }
       data.items.forEach((expense) => {
         const tr = document.createElement("tr");
         tr.innerHTML = `
           <td>${formatDate(expense.date)}</td>
           <td>${escapeHtml(expense.title)}</td>
-          <td>${formatMoney(expense.amount)}</td>
+          <td class="num">${formatMoney(expense.amount)}</td>
           <td class="actions-cell"><button class="danger void-btn" data-id="${expense.id}">Bekor qilish</button></td>
         `;
         tbody.appendChild(tr);
@@ -136,6 +144,20 @@
     page = 1;
     loadExpenses();
     loadSummary();
+  });
+
+  attachMonthShortcuts({
+    fromInput: dateFromInput,
+    toInput: dateToInput,
+    currentBtn: document.getElementById("current-month-btn"),
+    previousBtn: document.getElementById("previous-month-btn"),
+    labelEl: document.getElementById("period-label"),
+    onApply: () => {
+      searchTerm = searchInput.value.trim();
+      page = 1;
+      loadExpenses();
+      loadSummary();
+    },
   });
 
   await Promise.all([loadExpenses(), loadSummary()]);

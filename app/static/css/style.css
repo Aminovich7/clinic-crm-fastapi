@@ -1,315 +1,707 @@
-:root {
-  --bg: #f4f6f8;
-  --surface: #ffffff;
-  --border: #dfe3e8;
-  --text: #1f2937;
-  --muted: #6b7280;
-  --primary: #2563eb;
-  --primary-dark: #1d4ed8;
-  --danger: #dc2626;
-  --success: #16a34a;
-  --radius: 8px;
+/* ==========================================================================
+   Inter — self-hosted (SIL Open Font License 1.1)
+   Variable weight 400-700, Latin + Latin Extended subsets only (133 KB).
+   Self-hosted rather than loaded from a CDN so the interface still renders
+   correctly when the clinic's internet is down or slow.
+   ========================================================================== */
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/static/fonts/inter-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6,
+    U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
+    U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
-* {
-  box-sizing: border-box;
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/static/fonts/inter-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7,
+    U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F,
+    U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
+    U+A720-A7FF;
 }
+
+/* ==========================================================================
+   Klinika CRM — design tokens
+   ========================================================================== */
+:root {
+  /* Neutral ramp (slate — sits better under a blue primary than pure gray) */
+  --gray-50:  #f8fafc;
+  --gray-100: #f1f5f9;
+  --gray-200: #e2e8f0;
+  --gray-300: #cbd5e1;
+  --gray-400: #94a3b8;
+  --gray-500: #64748b;
+  --gray-600: #475569;
+  --gray-700: #334155;
+  --gray-800: #1e293b;
+  --gray-900: #0f172a;
+
+  /* Semantic surfaces */
+  --bg:            var(--gray-50);
+  --surface:       #ffffff;
+  --surface-alt:   var(--gray-50);
+  --border:        var(--gray-200);
+  --border-strong: var(--gray-300);
+  --text:          var(--gray-900);
+  /* 7.6:1 on white, 7.2:1 on --bg. Replaces #6b7280, which measured 4.46:1
+     on the page background and failed WCAG AA for normal text. */
+  --text-muted:    var(--gray-600);
+  --muted:         var(--text-muted); /* legacy alias — .muted still works */
+
+  /* Brand + status */
+  --primary:       #2563eb;
+  --primary-dark:  #1d4ed8;
+  --primary-light: #eff6ff;
+  --danger:        #dc2626;
+  --danger-dark:   #b91c1c;
+  --danger-light:  #fef2f2;
+  --success:       #16a34a;
+  --success-light: #f0fdf4;
+  --warning:       #d97706;
+  --warning-light: #fffbeb;
+  --violet:        #7c3aed;
+  --violet-light:  #f5f3ff;
+  --teal:          #0d9488;
+  --teal-light:    #f0fdfa;
+
+  /* Darkened variants used for figures and labels, so colored text clears
+     WCAG AA on white. The base hues above are for borders and fills only —
+     #16a34a as text measures 3.4:1 and #d97706 only 3.1:1. */
+  --primary-text: #1d4ed8;
+  --success-text: #15803d;
+  --warning-text: #b45309;
+  --danger-text:  #b91c1c;
+  --violet-text:  #6d28d9;
+  --teal-text:    #0f766e;
+
+  /* Spacing — 4px base */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+  --sp-7: 48px;
+
+  /* Type scale */
+  --fs-xs:   0.75rem;    /* 12px */
+  --fs-sm:   0.8125rem;  /* 13px */
+  --fs-base: 0.9375rem;  /* 15px */
+  --fs-md:   1.0625rem;  /* 17px */
+  --fs-lg:   1.25rem;    /* 20px */
+  --fs-xl:   1.75rem;    /* 28px */
+  --fs-2xl:  2.5rem;     /* 40px */
+
+  --lh-tight: 1.25;
+  --lh-base:  1.5;
+
+  --fw-normal:   400;
+  --fw-medium:   500;
+  --fw-semibold: 600;
+  --fw-bold:     700;
+
+  /* Radius + elevation */
+  --radius-sm: 6px;
+  --radius:    8px;
+  --radius-lg: 12px;
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, .06), 0 1px 3px rgba(15, 23, 42, .10);
+  --shadow-md: 0 4px 6px rgba(15, 23, 42, .05), 0 10px 15px rgba(15, 23, 42, .10);
+
+  /* Layout */
+  --sidebar-w:   240px;
+  --content-max: 1440px;
+}
+
+/* ==========================================================================
+   Base
+   ========================================================================== */
+* { box-sizing: border-box; }
 
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+  font-size: var(--fs-base);
+  line-height: var(--lh-base);
   background: var(--bg);
   color: var(--text);
+  -webkit-font-smoothing: antialiased;
 }
 
-a {
-  color: var(--primary);
+a { color: var(--primary); }
+
+.hidden { display: none !important; }
+
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
 }
 
-.hidden {
-  display: none !important;
+/* ==========================================================================
+   App shell — fixed sidebar + scrolling content
+   ========================================================================== */
+body.app-shell {
+  display: grid;
+  grid-template-columns: var(--sidebar-w) 1fr;
+  min-height: 100vh;
 }
 
-/* Nav */
-header.topbar {
+/* Assistants only have one page, so the sidebar is suppressed entirely
+   rather than rendering a nav with a single link to the current page. */
+body.app-shell.no-sidebar { grid-template-columns: 1fr; }
+body.app-shell.no-sidebar .sidebar { display: none; }
+
+.sidebar {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+  background: var(--gray-900);
+  border-right: 1px solid var(--gray-800);
+  padding: var(--sp-5) 0;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-  padding: 12px 20px;
+  flex-direction: column;
+  gap: var(--sp-5);
 }
 
-header.topbar .brand {
-  font-weight: 700;
-  font-size: 1.1rem;
+.sidebar-brand {
+  padding: 0 var(--sp-5);
+  color: #fff;
+  font-size: var(--fs-md);
+  font-weight: var(--fw-bold);
+  letter-spacing: -0.01em;
 }
 
 nav.mainnav {
   display: flex;
-  gap: 4px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: var(--sp-5);
+}
+
+.nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.nav-group-label {
+  padding: 0 var(--sp-5) var(--sp-1);
+  color: var(--gray-500);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
 
 nav.mainnav a {
-  padding: 8px 12px;
-  border-radius: var(--radius);
+  display: block;
+  padding: var(--sp-2) var(--sp-5);
+  color: var(--gray-300);
   text-decoration: none;
-  color: var(--text);
-  font-size: 0.9rem;
+  font-size: var(--fs-base);
+  border-left: 3px solid transparent;
 }
 
-nav.mainnav a.active,
 nav.mainnav a:hover {
-  background: var(--bg);
-  color: var(--primary);
+  background: var(--gray-800);
+  color: #fff;
+}
+
+nav.mainnav a.active {
+  background: var(--gray-800);
+  color: #fff;
+  border-left-color: var(--primary);
+  font-weight: var(--fw-semibold);
+}
+
+.app-main {
+  min-width: 0; /* lets wide tables scroll instead of blowing out the grid */
+  display: flex;
+  flex-direction: column;
+}
+
+/* ==========================================================================
+   Top bar — page title + current user
+   ========================================================================== */
+header.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: var(--sp-3) var(--sp-5);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.page-title {
+  margin: 0;
+  font-size: var(--fs-xl);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-tight);
+  letter-spacing: -0.02em;
 }
 
 .user-info {
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-size: 0.85rem;
-  color: var(--muted);
-}
-
-.user-info button {
-  padding: 6px 10px;
+  gap: var(--sp-3);
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  white-space: nowrap;
 }
 
 main.container {
-  max-width: 1100px;
+  width: 100%;
+  max-width: var(--content-max);
   margin: 0 auto;
-  padding: 20px;
+  padding: var(--sp-5);
 }
 
+/* ==========================================================================
+   Typography
+   ========================================================================== */
 h1 {
-  font-size: 1.4rem;
-  margin: 0 0 16px;
+  font-size: var(--fs-xl);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-tight);
+  letter-spacing: -0.02em;
+  margin: 0 0 var(--sp-4);
 }
 
 h2 {
-  font-size: 1.1rem;
-  margin: 24px 0 12px;
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-tight);
+  margin: var(--sp-6) 0 var(--sp-3);
 }
 
+.muted {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+
+/* Money and other figures: right-aligned with fixed-width digits so columns
+   line up and can be compared down the page. */
+.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ==========================================================================
+   Cards + stats
+   ========================================================================== */
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 16px;
-  margin-bottom: 16px;
+  box-shadow: var(--shadow-sm);
+  padding: var(--sp-5);
+  margin-bottom: var(--sp-4);
 }
+
+/* Data-entry regions are tinted and accented; everything that *displays*
+   data (filter bars, tables, stat grids) stays white. That single rule holds
+   app-wide, so "blue panel = I am creating a record" is learnable once and
+   then true on every page — which is what separates the receipt forms from
+   the "So'nggi yozuvlar" list underneath them at a glance. */
+.card.entry-card {
+  background: var(--primary-light);
+  border-color: #bfdbfe;
+  border-left: 4px solid var(--primary);
+}
+
+.card.entry-card h2 {
+  margin-top: 0;
+  color: var(--primary-text);
+}
+
+/* Inputs need to stay white so the fields read as fillable against the
+   tinted panel rather than blending into it. */
+.card.entry-card input,
+.card.entry-card select,
+.card.entry-card textarea {
+  background: var(--surface);
+  border-color: #bfdbfe;
+}
+
+.card.entry-card .field label { color: var(--primary-text); }
 
 .grid {
   display: grid;
-  gap: 16px;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--sp-4);
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  margin-bottom: var(--sp-4);
 }
 
 .stat-card {
   background: var(--surface);
   border: 1px solid var(--border);
+  border-left: 4px solid var(--border-strong);
   border-radius: var(--radius);
-  padding: 16px;
+  box-shadow: var(--shadow-sm);
+  padding: var(--sp-5);
 }
 
 .stat-card .label {
-  font-size: 0.8rem;
-  color: var(--muted);
-  margin-bottom: 6px;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--text-muted);
+  margin-bottom: var(--sp-2);
 }
 
 .stat-card .value {
-  font-size: 1.4rem;
-  font-weight: 700;
+  font-size: var(--fs-xl);
+  font-weight: var(--fw-bold);
+  line-height: var(--lh-tight);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
 }
 
+/* "so'm" printed after a figure in small muted type, so a number reads as
+   money without inflating the figure itself. */
+.stat-card .value .unit {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--text-muted);
+  letter-spacing: 0;
+  margin-left: var(--sp-1);
+}
+
+/* Semantic variants — the accent rail and the figure share one hue so the
+   category is readable from the color alone. Backgrounds stay white; only
+   the hero card is tinted. */
+.stat-card--primary { border-left-color: var(--primary); }
+.stat-card--primary .value { color: var(--primary-text); }
+
+.stat-card--success { border-left-color: var(--success); }
+.stat-card--success .value { color: var(--success-text); }
+
+.stat-card--warning { border-left-color: var(--warning); }
+.stat-card--warning .value { color: var(--warning-text); }
+
+.stat-card--danger { border-left-color: var(--danger); }
+.stat-card--danger .value { color: var(--danger-text); }
+
+.stat-card--violet { border-left-color: var(--violet); }
+.stat-card--violet .value { color: var(--violet-text); }
+
+.stat-card--teal { border-left-color: var(--teal); }
+.stat-card--teal .value { color: var(--teal-text); }
+
+/* The one figure the page exists to show. */
+.stat-card--hero {
+  grid-column: span 2;
+  background: var(--success-light);
+  border-color: #bbf7d0;
+  border-left: 4px solid var(--success);
+}
+
+.stat-card--hero .label {
+  font-size: var(--fs-base);
+  color: var(--success-text);
+}
+
+.stat-card--hero .value {
+  font-size: var(--fs-2xl);
+  color: var(--success-text);
+}
+
+@media (max-width: 720px) {
+  .stat-card--hero { grid-column: span 1; }
+  .stat-card--hero .value { font-size: var(--fs-xl); }
+}
+
+/* ==========================================================================
+   Forms
+   ========================================================================== */
 form.inline-form {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: var(--sp-3);
   align-items: flex-end;
 }
 
 .field {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--sp-1);
 }
 
 .field label {
-  font-size: 0.8rem;
-  color: var(--muted);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--text-muted);
 }
 
 input,
 select,
-button {
-  font-size: 0.9rem;
-  padding: 8px 10px;
-  border-radius: var(--radius);
-  border: 1px solid var(--border);
+button,
+textarea {
+  font-family: inherit;
+  font-size: var(--fs-base);
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
   background: var(--surface);
   color: var(--text);
+  line-height: 1.4;
 }
 
+input:hover,
+select:hover { border-color: var(--gray-400); }
+
 input:focus,
-select:focus {
+select:focus,
+textarea:focus {
   outline: 2px solid var(--primary);
   outline-offset: -1px;
+  border-color: var(--primary);
 }
 
 button {
   cursor: pointer;
   background: var(--primary);
   color: #fff;
-  border: none;
-  font-weight: 600;
+  border: 1px solid var(--primary);
+  font-weight: var(--fw-semibold);
+  white-space: nowrap;
 }
 
 button:hover {
   background: var(--primary-dark);
+  border-color: var(--primary-dark);
 }
 
 button.secondary {
   background: var(--surface);
   color: var(--text);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
 }
-
-button.secondary:hover {
-  background: var(--bg);
-}
+button.secondary:hover { background: var(--gray-100); }
 
 button.danger {
   background: var(--danger);
+  border-color: var(--danger);
+}
+button.danger:hover {
+  background: var(--danger-dark);
+  border-color: var(--danger-dark);
 }
 
-button:disabled {
-  opacity: 0.6;
+/* Explicit disabled colors instead of opacity:.6, which dropped a primary
+   button's label to ~2.5:1 and read as a rendering fault. */
+button:disabled,
+button:disabled:hover {
+  background: var(--gray-200);
+  color: var(--gray-500);
+  border-color: var(--gray-200);
+  opacity: 1;
   cursor: not-allowed;
+}
+
+/* ==========================================================================
+   Tables
+   ========================================================================== */
+.table-wrap {
+  overflow-x: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  margin-bottom: var(--sp-3);
 }
 
 table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.88rem;
+  font-size: var(--fs-base);
 }
 
-th,
-td {
+th, td {
   text-align: left;
-  padding: 8px 10px;
+  padding: var(--sp-3) var(--sp-4);
   border-bottom: 1px solid var(--border);
 }
 
 th {
-  color: var(--muted);
-  font-weight: 600;
-  font-size: 0.78rem;
+  background: var(--surface-alt);
+  color: var(--text-muted);
+  font-weight: var(--fw-semibold);
+  font-size: var(--fs-sm);
   text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
 }
 
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:hover { background: var(--surface-alt); }
+
 tr.voided {
-  opacity: 0.5;
+  opacity: 0.55;
   text-decoration: line-through;
 }
 
-.table-wrap {
-  overflow-x: auto;
+.actions-cell {
+  display: flex;
+  gap: var(--sp-2);
 }
 
+/* Raised from 4px/0.78rem, which produced a ~23px control — under the 24px
+   WCAG 2.2 (SC 2.5.8) minimum target size. */
+.actions-cell button {
+  padding: var(--sp-2) var(--sp-3);
+  font-size: var(--fs-sm);
+}
+
+/* Empty + loading states -------------------------------------------------- */
+.table-empty:hover { background: transparent; }
+
+.table-empty td {
+  padding: var(--sp-7) var(--sp-4);
+  text-align: center;
+  color: var(--text-muted);
+  font-size: var(--fs-base);
+}
+
+.is-loading {
+  opacity: 0.45;
+  pointer-events: none;
+  transition: opacity .12s ease-in-out;
+}
+
+/* ==========================================================================
+   Tabs
+   ========================================================================== */
 .tabs {
   display: flex;
-  gap: 6px;
-  margin-bottom: 16px;
+  gap: var(--sp-1);
+  margin-bottom: var(--sp-4);
   border-bottom: 1px solid var(--border);
 }
 
 .tabs button {
   background: none;
-  color: var(--muted);
+  color: var(--text-muted);
   border: none;
   border-bottom: 2px solid transparent;
   border-radius: 0;
-  padding: 10px 14px;
+  padding: var(--sp-3) var(--sp-4);
+  font-weight: var(--fw-medium);
+}
+
+.tabs button:hover {
+  background: none;
+  color: var(--text);
 }
 
 .tabs button.active {
   color: var(--primary);
   border-bottom-color: var(--primary);
-  font-weight: 700;
+  font-weight: var(--fw-semibold);
+}
+
+/* ==========================================================================
+   Feedback
+   ========================================================================== */
+.error-box,
+.success-box {
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--radius-sm);
+  margin-bottom: var(--sp-3);
+  font-size: var(--fs-base);
 }
 
 .error-box {
-  background: #fef2f2;
+  background: var(--danger-light);
   border: 1px solid #fecaca;
-  color: var(--danger);
-  padding: 10px 12px;
-  border-radius: var(--radius);
-  margin-bottom: 12px;
-  font-size: 0.85rem;
+  color: #991b1b;
 }
 
 .success-box {
-  background: #f0fdf4;
+  background: var(--success-light);
   border: 1px solid #bbf7d0;
-  color: var(--success);
-  padding: 10px 12px;
-  border-radius: var(--radius);
-  margin-bottom: 12px;
-  font-size: 0.85rem;
+  color: #15803d;
 }
 
 .pagination {
   display: flex;
-  gap: 8px;
+  gap: var(--sp-2);
   align-items: center;
-  margin-top: 12px;
-  font-size: 0.85rem;
+  margin-top: var(--sp-3);
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
 }
 
+/* ==========================================================================
+   Login
+   ========================================================================== */
 .center-page {
   min-height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
   background: var(--bg);
+  padding: var(--sp-4);
 }
 
 .login-card {
-  width: 320px;
+  width: 360px;
+  max-width: 100%;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 28px;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  padding: var(--sp-6);
 }
 
 .login-card h1 {
   text-align: center;
+  margin-bottom: var(--sp-5);
 }
 
-.login-card .field {
-  margin-bottom: 12px;
-}
+.login-card .field { margin-bottom: var(--sp-3); }
+.login-card .field input { width: 100%; }
 
 .login-card button {
   width: 100%;
-  margin-top: 8px;
+  margin-top: var(--sp-3);
+  padding: var(--sp-3);
 }
 
-.muted {
-  color: var(--muted);
-  font-size: 0.85rem;
-}
+/* ==========================================================================
+   Minimal responsive guard (a full responsive pass is a separate task)
+   ========================================================================== */
+@media (max-width: 1000px) {
+  body.app-shell { grid-template-columns: 1fr; }
 
-.actions-cell {
-  display: flex;
-  gap: 6px;
-}
+  .sidebar {
+    position: static;
+    height: auto;
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--sp-3);
+    padding: var(--sp-3) var(--sp-4);
+  }
 
-.actions-cell button {
-  padding: 4px 8px;
-  font-size: 0.78rem;
+  nav.mainnav { flex-direction: row; flex-wrap: wrap; gap: var(--sp-2); }
+  .nav-group { flex-direction: row; flex-wrap: wrap; align-items: center; }
+  .nav-group-label { display: none; }
+
+  nav.mainnav a {
+    padding: var(--sp-2) var(--sp-3);
+    border-left: none;
+    border-radius: var(--radius-sm);
+  }
+  nav.mainnav a.active { border-left: none; background: var(--primary); }
 }

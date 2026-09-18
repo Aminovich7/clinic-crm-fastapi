@@ -21,12 +21,15 @@
       <input type="date" id="date_to">
     </div>
     <button type="submit">Qidirish</button>
+    <button type="button" class="secondary" id="current-month-btn">Joriy oy</button>
+    <button type="button" class="secondary" id="previous-month-btn">O'tgan oy</button>
   </form>
+  <p class="muted" id="period-label"></p>
 </div>
 
 <div class="grid" id="summary-cards"></div>
 
-<div class="card">
+<div class="card entry-card">
   <h2>Xarajat qo'shish</h2>
   <form class="inline-form" id="expense-form">
     <div class="field">
@@ -51,7 +54,7 @@
       <tr>
         <th>Sana</th>
         <th>Sarlavha</th>
-        <th>Summa</th>
+        <th class="num">Summa</th>
         <th>Amallar</th>
       </tr>
     </thead>

@@ -4,24 +4,20 @@
 <h1>Audit jurnali</h1>
 
 <div id="error-container"></div>
+<div id="success-container"></div>
+
+<p class="muted">
+  Bu yerda barcha bekor qilingan yozuvlar ko'rsatiladi. "Tiklash" yozuvni
+  qaytaradi va u yana hisobotlarga qo'shiladi. "O'chirish" yozuvni butunlay
+  o'chiradi — bu amalni qaytarib bo'lmaydi va yozuv ma'lumotlari hech qayerda
+  saqlanmaydi.
+</p>
 
 <div class="card">
-  <form class="inline-form" id="filter-form">
+  <form class="inline-form" id="voided-filter-form">
     <div class="field">
-      <label for="resource_type">Resurs turi</label>
-      <input type="text" id="resource_type" placeholder="masalan: consultation">
-    </div>
-    <div class="field">
-      <label for="resource_id">Resurs ID</label>
-      <input type="text" id="resource_id">
-    </div>
-    <div class="field">
-      <label for="date_from">Dan</label>
-      <input type="date" id="date_from">
-    </div>
-    <div class="field">
-      <label for="date_to">Gacha</label>
-      <input type="date" id="date_to">
+      <label for="voided_resource_type">Turi</label>
+      <select id="voided_resource_type"></select>
     </div>
     <button type="submit">Filtrlash</button>
   </form>
@@ -31,17 +27,19 @@
   <table>
     <thead>
       <tr>
-        <th>Vaqt</th>
-        <th>Amal bajaruvchi</th>
-        <th>Amal</th>
-        <th>Resurs</th>
-        <th>Resurs ID</th>
+        <th>Turi</th>
+        <th>Tavsif</th>
+        <th>Sana</th>
+        <th class="num">Summa</th>
+        <th>Bekor qilingan</th>
+        <th>Kim bekor qildi</th>
+        <th>Amallar</th>
       </tr>
     </thead>
-    <tbody id="audit-tbody"></tbody>
+    <tbody id="voided-tbody"></tbody>
   </table>
 </div>
-<div class="pagination" id="pagination"></div>
+<div class="pagination" id="voided-pagination"></div>
 {% endblock %}
 {% block scripts %}
 <script src="/static/js/audit_log.js?v={{ asset_version }}"></script>

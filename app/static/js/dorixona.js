@@ -30,14 +30,18 @@
     successContainer.appendChild(box);
   }
 
-  function statCard(label, value, colorByValue = false) {
+  // colorByValue picks the variant from the sign instead of a fixed hue, so
+  // a negative pharmacy balance turns the whole card red rather than just
+  // the digits.
+  function statCard(label, value, variant, colorByValue = false) {
+    const resolved = colorByValue
+      ? (Number(value) >= 0 ? "success" : "danger")
+      : variant;
     const div = document.createElement("div");
-    div.className = "stat-card";
-    div.innerHTML = `<div class="label">${label}</div><div class="value">${formatMoney(value)}</div>`;
-    if (colorByValue) {
-      const valueEl = div.querySelector(".value");
-      valueEl.style.color = Number(value) >= 0 ? "var(--success)" : "var(--danger)";
-    }
+    div.className = `stat-card${resolved ? ` stat-card--${resolved}` : ""}`;
+    div.innerHTML =
+      `<div class="label">${label}</div>` +
+      `<div class="value">${formatMoney(value)}<span class="unit">so'm</span></div>`;
     return div;
   }
 
@@ -52,9 +56,9 @@
     balanceCards.innerHTML = "";
     try {
       const summary = await apiFetch(`/pharmacy/summary?${currentRangeParams().toString()}`);
-      balanceCards.appendChild(statCard("Olingan dori (jami)", summary.total_medicine_cost));
-      balanceCards.appendChild(statCard("To'langan (jami)", summary.total_paid));
-      balanceCards.appendChild(statCard("Balans", summary.balance, true));
+      balanceCards.appendChild(statCard("Olingan dori (jami)", summary.total_medicine_cost, "warning"));
+      balanceCards.appendChild(statCard("To'langan (jami)", summary.total_paid, "primary"));
+      balanceCards.appendChild(statCard("Balans", summary.balance, null, true));
     } catch (err) {
       showError(errorContainer, err.detail || err.message || "Balansni yuklashda xatolik");
     }
@@ -93,6 +97,7 @@
     }
   }
 
+
   async function loadEntries() {
     clearMessages();
     tbody.innerHTML = "";
@@ -103,14 +108,17 @@
     params.set("page_size", pageSize);
 
     try {
-      const data = await apiFetch(`/pharmacy/entries?${params.toString()}`);
+      const data = await withLoading(tbody.closest("table"), () => apiFetch(`/pharmacy/entries?${params.toString()}`));
 
+      if (data.items.length === 0) {
+        renderEmpty(tbody, columnCount(tbody.closest("table")), "Ma'lumot topilmadi");
+      }
       data.items.forEach((entry) => {
         const tr = document.createElement("tr");
         tr.innerHTML = `
           <td>${formatDate(entry.date)}</td>
-          <td>${entry.medicine_cost != null ? formatMoney(entry.medicine_cost) : "—"}</td>
-          <td>${entry.amount_paid != null ? formatMoney(entry.amount_paid) : "—"}</td>
+          <td class="num">${entry.medicine_cost != null ? formatMoney(entry.medicine_cost) : "—"}</td>
+          <td class="num">${entry.amount_paid != null ? formatMoney(entry.amount_paid) : "—"}</td>
           <td>${entry.comment ? escapeHtml(entry.comment) : "—"}</td>
           <td class="actions-cell"><button class="danger void-btn" data-id="${entry.id}">Bekor qilish</button></td>
         `;
@@ -140,6 +148,19 @@
     page = 1;
     loadEntries();
     loadBalance();
+  });
+
+  attachMonthShortcuts({
+    fromInput: dateFromInput,
+    toInput: dateToInput,
+    currentBtn: document.getElementById("current-month-btn"),
+    previousBtn: document.getElementById("previous-month-btn"),
+    labelEl: document.getElementById("period-label"),
+    onApply: () => {
+      page = 1;
+      loadEntries();
+      loadBalance();
+    },
   });
 
   await Promise.all([loadEntries(), loadBalance()]);

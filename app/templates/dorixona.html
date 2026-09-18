@@ -17,12 +17,15 @@
       <input type="date" id="date_to">
     </div>
     <button type="submit">Qidirish</button>
+    <button type="button" class="secondary" id="current-month-btn">Joriy oy</button>
+    <button type="button" class="secondary" id="previous-month-btn">O'tgan oy</button>
   </form>
+  <p class="muted" id="period-label"></p>
 </div>
 
 <div class="grid" id="balance-cards"></div>
 
-<div class="card">
+<div class="card entry-card">
   <h2>Yozuv qo'shish</h2>
   <form class="inline-form" id="entry-form">
     <div class="field">
@@ -50,8 +53,8 @@
     <thead>
       <tr>
         <th>Sana</th>
-        <th>Olingan dori</th>
-        <th>To'langan</th>
+        <th class="num">Olingan dori</th>
+        <th class="num">To'langan</th>
         <th>Izoh</th>
         <th>Amallar</th>
       </tr>

@@ -5,7 +5,6 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.audit.service import record_audit_event
 from app.duty.models import DutyEntry
 from app.duty.schemas import DutyEntryCreate, DutyEntryUpdate
 from app.staff.service import get_staff_or_404
@@ -13,10 +12,8 @@ from app.users.models import User
 
 CLINIC_TZ = ZoneInfo("Asia/Tashkent")
 
-
 def _resolve_create_date(date_value: date | None) -> date:
     return date_value if date_value is not None else datetime.now(CLINIC_TZ).date()
-
 
 async def create_duty_entry(
     db: AsyncSession,
@@ -36,25 +33,15 @@ async def create_duty_entry(
     db.add(record)
     await db.flush()
 
-    await record_audit_event(
-        db,
-        actor=actor,
-        action="create_duty_entry",
-        resource_type="duty_entry",
-        resource_id=record.id,
-    )
-
     await db.commit()
     await db.refresh(record)
     return record
-
 
 async def get_duty_entry_or_404(db: AsyncSession, duty_entry_id: int) -> DutyEntry:
     record = await db.get(DutyEntry, duty_entry_id)
     if record is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Duty entry not found")
     return record
-
 
 async def list_duty_entries(
     db: AsyncSession,
@@ -88,7 +75,6 @@ async def list_duty_entries(
     result = await db.execute(stmt)
     return list(result.scalars().all()), total
 
-
 async def update_duty_entry(
     db: AsyncSession,
     *,
@@ -104,19 +90,9 @@ async def update_duty_entry(
     for field, value in changes.items():
         setattr(duty_entry, field, value)
 
-    await record_audit_event(
-        db,
-        actor=actor,
-        action="update_duty_entry",
-        resource_type="duty_entry",
-        resource_id=duty_entry.id,
-        metadata={"changed_fields": list(changes.keys())},
-    )
-
     await db.commit()
     await db.refresh(duty_entry)
     return duty_entry
-
 
 async def void_duty_entry(db: AsyncSession, *, actor: User, duty_entry: DutyEntry) -> DutyEntry:
     if duty_entry.is_voided:
@@ -125,14 +101,6 @@ async def void_duty_entry(db: AsyncSession, *, actor: User, duty_entry: DutyEntr
     duty_entry.is_voided = True
     duty_entry.voided_at = datetime.now(ZoneInfo("UTC"))
     duty_entry.voided_by_id = actor.id
-
-    await record_audit_event(
-        db,
-        actor=actor,
-        action="void_duty_entry",
-        resource_type="duty_entry",
-        resource_id=duty_entry.id,
-    )
 
     await db.commit()
     await db.refresh(duty_entry)

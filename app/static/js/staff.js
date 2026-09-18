@@ -142,8 +142,11 @@
     if (statusFilter) params.set("status", statusFilter);
 
     try {
-      const data = await apiFetch(`/staff?${params.toString()}`);
+      const data = await withLoading(tbody.closest("table"), () => apiFetch(`/staff?${params.toString()}`));
 
+      if (data.items.length === 0) {
+        renderEmpty(tbody, columnCount(tbody.closest("table")), "Ma'lumot topilmadi");
+      }
       data.items.forEach((staff) => {
         const tr = document.createElement("tr");
         const actions = [

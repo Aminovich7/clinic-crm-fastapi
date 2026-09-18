@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.pagination import PaginatedResponse
+from app.common.voidable import hard_delete_voided_record, restore_voided_record
 from app.db.session import get_db
 from app.pharmacy.schemas import (
     PharmacyBalance,
@@ -42,12 +43,12 @@ async def list_pharmacy_entries_endpoint(
     date_to: date | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
-    _: User = Depends(require_roles(*MANAGE_ROLES)),
+    actor: User = Depends(require_roles(*MANAGE_ROLES)),
     db: AsyncSession = Depends(get_db),
 ):
     try:
         items, total = await list_pharmacy_entries(
-            db, date_from=date_from, date_to=date_to, page=page, page_size=page_size
+            db, date_from=date_from, date_to=date_to, page=page, page_size=page_size,
         )
     except ValueError as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc))
@@ -97,3 +98,39 @@ async def void_pharmacy_entry_endpoint(
 ):
     record = await get_pharmacy_entry_or_404(db, pharmacy_entry_id)
     return await void_pharmacy_entry(db, actor=actor, pharmacy_entry=record)
+
+
+@router.post("/entries/{pharmacy_entry_id}/restore", response_model=PharmacyEntryRead)
+async def restore_pharmacy_entry_endpoint(
+    pharmacy_entry_id: int,
+    actor: User = Depends(require_roles(UserRoleEnum.SUPERADMIN)),
+    db: AsyncSession = Depends(get_db),
+):
+    record = await get_pharmacy_entry_or_404(db, pharmacy_entry_id)
+    return await restore_voided_record(
+        db,
+        actor=actor,
+        obj=record,
+        action="restore_pharmacy_entry",
+        resource_type="pharmacy_entry",
+    )
+
+
+@router.delete("/entries/{pharmacy_entry_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_pharmacy_entry_endpoint(
+    pharmacy_entry_id: int,
+    actor: User = Depends(require_roles(UserRoleEnum.SUPERADMIN)),
+    db: AsyncSession = Depends(get_db),
+):
+    """Permanently delete an already-voided record (superadmin only).
+
+    The full row is written into the audit log before it is destroyed.
+    """
+    record = await get_pharmacy_entry_or_404(db, pharmacy_entry_id)
+    await hard_delete_voided_record(
+        db,
+        actor=actor,
+        obj=record,
+        action="delete_pharmacy_entry",
+        resource_type="pharmacy_entry",
+    )

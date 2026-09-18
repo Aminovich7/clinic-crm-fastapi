@@ -6,18 +6,24 @@
   <title>{% block title %}Klinika CRM{% endblock %}</title>
   <link rel="stylesheet" href="/static/css/style.css?v={{ asset_version }}">
 </head>
-<body>
-  <header class="topbar">
-    <div class="brand">Klinika CRM</div>
-    <nav class="mainnav" id="mainnav"></nav>
-    <div class="user-info">
-      <span id="current-user-name"></span>
-      <button id="logout-btn" class="secondary">Chiqish</button>
-    </div>
-  </header>
-  <main class="container">
-    {% block content %}{% endblock %}
-  </main>
+<body class="app-shell">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">Klinika CRM</div>
+    <nav class="mainnav" id="mainnav" aria-label="Asosiy menyu"></nav>
+  </aside>
+
+  <div class="app-main">
+    <header class="topbar">
+      <h1 class="page-title" id="page-title"></h1>
+      <div class="user-info">
+        <span id="current-user-name"></span>
+        <button id="logout-btn" class="secondary">Chiqish</button>
+      </div>
+    </header>
+    <main class="container">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
 
   <script src="/static/js/api.js?v={{ asset_version }}"></script>
   <script src="/static/js/auth.js?v={{ asset_version }}"></script>

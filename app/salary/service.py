@@ -6,7 +6,6 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.audit.service import record_audit_event
 from app.duty.models import DutyEntry
 from app.finance.calculations import consultation_totals, money, room_totals, surgery_totals
 from app.finance.models import Consultation, Room, Surgery
@@ -25,10 +24,8 @@ from app.users.models import User
 CLINIC_TZ = ZoneInfo("Asia/Tashkent")
 ZERO = Decimal("0")
 
-
 def _resolve_create_datetime(value: datetime | None) -> datetime:
     return value if value is not None else datetime.now(CLINIC_TZ)
-
 
 def _current_month_range() -> tuple[date, date]:
     from calendar import monthrange
@@ -36,7 +33,6 @@ def _current_month_range() -> tuple[date, date]:
     today = datetime.now(CLINIC_TZ).date()
     last_day = monthrange(today.year, today.month)[1]
     return today.replace(day=1), today.replace(day=last_day)
-
 
 async def _sum_doctor_share(
     db: AsyncSession,
@@ -66,7 +62,6 @@ async def _sum_doctor_share(
 
     return total
 
-
 async def _sum_duty_entries(
     db: AsyncSession,
     *,
@@ -85,7 +80,6 @@ async def _sum_duty_entries(
 
     return (await db.execute(stmt)).scalar_one()
 
-
 async def compute_earned_amount(
     db: AsyncSession,
     *,
@@ -98,12 +92,36 @@ async def compute_earned_amount(
     else:
         if date_from is None or date_to is None:
             raise ValueError("date_from and date_to are required to prorate a fixed salary")
-        base = prorate_fixed_salary(staff.fixed_salary or ZERO, date_from, date_to)
+
+        # Nobody accrues salary before they were hired. Without this clamp a
+        # query for any month preceding the hire date returned a *full*
+        # month's pay — e.g. someone hired 2026-09-17 showed the whole
+        # fixed_salary as owed for August. Clamping the lower bound also
+        # prorates the hire month itself, so a mid-month hire is paid only
+        # for the days actually worked.
+        #
+        # Deliberately keyed on hire_date alone, with NO created_at fallback:
+        # created_at is when the record was typed into the CRM, which says
+        # nothing about when the person started working. Falling back to it
+        # would quietly *reduce* the pay owed to long-standing staff whose
+        # records were entered recently. Staff with no hire_date therefore
+        # keep the un-clamped behaviour until one is filled in.
+        # (build_staff_lifetime_summary does use the created_at fallback, but
+        # only as an explicitly documented approximation for a figure nobody
+        # pays out from.)
+        if staff.hire_date is not None and staff.hire_date > date_from:
+            effective_from = staff.hire_date
+        else:
+            effective_from = date_from
+
+        if effective_from > date_to:
+            base = ZERO
+        else:
+            base = prorate_fixed_salary(staff.fixed_salary or ZERO, effective_from, date_to)
 
     duty_sum = await _sum_duty_entries(db, staff_id=staff.id, date_from=date_from, date_to=date_to)
 
     return money(base + duty_sum)
-
 
 async def compute_paid_amount(
     db: AsyncSession,
@@ -124,7 +142,6 @@ async def compute_paid_amount(
         SalaryPayment.period_end >= date_from,
     )
     return (await db.execute(stmt)).scalar_one()
-
 
 async def create_salary_payment(
     db: AsyncSession,
@@ -149,25 +166,15 @@ async def create_salary_payment(
     db.add(record)
     await db.flush()
 
-    await record_audit_event(
-        db,
-        actor=actor,
-        action="create_salary_payment",
-        resource_type="salary_payment",
-        resource_id=record.id,
-    )
-
     await db.commit()
     await db.refresh(record)
     return record
-
 
 async def get_salary_payment_or_404(db: AsyncSession, salary_payment_id: int) -> SalaryPayment:
     record = await db.get(SalaryPayment, salary_payment_id)
     if record is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Salary payment not found")
     return record
-
 
 async def list_salary_payments(
     db: AsyncSession,
@@ -200,7 +207,6 @@ async def list_salary_payments(
     result = await db.execute(stmt)
     return list(result.scalars().all()), total
 
-
 async def update_salary_payment(
     db: AsyncSession,
     *,
@@ -226,19 +232,9 @@ async def update_salary_payment(
     for field, value in changes.items():
         setattr(salary_payment, field, value)
 
-    await record_audit_event(
-        db,
-        actor=actor,
-        action="update_salary_payment",
-        resource_type="salary_payment",
-        resource_id=salary_payment.id,
-        metadata={"changed_fields": list(changes.keys())},
-    )
-
     await db.commit()
     await db.refresh(salary_payment)
     return salary_payment
-
 
 async def void_salary_payment(
     db: AsyncSession, *, actor: User, salary_payment: SalaryPayment
@@ -250,18 +246,9 @@ async def void_salary_payment(
     salary_payment.voided_at = datetime.now(ZoneInfo("UTC"))
     salary_payment.voided_by_id = actor.id
 
-    await record_audit_event(
-        db,
-        actor=actor,
-        action="void_salary_payment",
-        resource_type="salary_payment",
-        resource_id=salary_payment.id,
-    )
-
     await db.commit()
     await db.refresh(salary_payment)
     return salary_payment
-
 
 async def build_staff_balance(
     db: AsyncSession,
@@ -302,7 +289,6 @@ async def build_staff_balance(
 
     return summaries
 
-
 async def build_staff_lifetime_summary(db: AsyncSession, *, staff: Staff) -> StaffLifetimeSummary:
     if staff.role == StaffRoleEnum.DOCTOR:
         base = await _sum_doctor_share(db, staff_id=staff.id, date_from=None, date_to=None)
@@ -331,7 +317,6 @@ async def build_staff_lifetime_summary(db: AsyncSession, *, staff: Staff) -> Sta
         lifetime_paid=money(lifetime_paid),
         lifetime_remaining=money(lifetime_earned - lifetime_paid),
     )
-
 
 async def sum_total_paid(db: AsyncSession, *, date_from: date | None, date_to: date | None) -> Decimal:
     """Dashboard helper: how much was disbursed (by paid_at) in this window.

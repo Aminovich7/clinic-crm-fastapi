@@ -50,10 +50,27 @@
     if (activeReport === "doctor") loadReport();
   });
 
+  // The same four labels repeat across all five report tabs, so the accent
+  // colour is derived from the label rather than passed at each call site —
+  // that keeps "Klinika foydasi" green on every tab automatically.
+  const VARIANT_BY_LABEL = {
+    "Umumiy daromad": "primary",
+    "Shifokor ulushi": "violet",
+    "Xarajatlar": "warning",
+    "Klinika foydasi": "success",
+    "Ko'riklardan ulush": "primary",
+    "Operatsiyalardan ulush": "violet",
+    "Xonalardan ulush": "teal",
+    "Jami ulush": "success",
+  };
+
   function statCard(label, value) {
+    const variant = VARIANT_BY_LABEL[label];
     const div = document.createElement("div");
-    div.className = "stat-card";
-    div.innerHTML = `<div class="label">${label}</div><div class="value">${formatMoney(value)}</div>`;
+    div.className = `stat-card${variant ? ` stat-card--${variant}` : ""}`;
+    div.innerHTML =
+      `<div class="label">${label}</div>` +
+      `<div class="value">${formatMoney(value)}<span class="unit">so'm</span></div>`;
     return div;
   }
 
@@ -90,6 +107,26 @@
     rooms: "room_doctor_shares",
   };
 
+  // Read the palette out of CSS rather than repeating hex literals here, so
+  // the chart can't drift from the tokens in style.css the way the old
+  // hardcoded "#2563eb" would have.
+  function cssColor(name, fallback) {
+    const value = getComputedStyle(document.documentElement)
+      .getPropertyValue(name)
+      .trim();
+    return value || fallback;
+  }
+
+  // Ko'riklar / Operatsiyalar / Xonalar use the same three hues as their
+  // stat cards on the dashboard, so the chart and the tiles agree.
+  function sectionColors() {
+    return [
+      cssColor("--primary", "#2563eb"),
+      cssColor("--violet", "#7c3aed"),
+      cssColor("--teal", "#0d9488"),
+    ];
+  }
+
   function renderChart(report) {
     const labels = [];
     const values = [];
@@ -120,7 +157,7 @@
           {
             label: activeReport === "total" ? "Bo'limlar bo'yicha daromad" : "Shifokor ulushi",
             data: values,
-            backgroundColor: "#2563eb",
+            backgroundColor: activeReport === "total" ? sectionColors() : cssColor("--primary", "#2563eb"),
           },
         ],
       },
@@ -131,7 +168,7 @@
     });
   }
 
-  const DOCTOR_TABLE_HEADER = "<tr><th>Shifokor</th><th>Ulush jami</th><th>Yozuvlar soni</th></tr>";
+  const DOCTOR_TABLE_HEADER = "<tr><th>Shifokor</th><th class=\"num\">Ulush jami</th><th class=\"num\">Yozuvlar soni</th></tr>";
 
   function renderDoctorTable(report) {
     doctorThead.innerHTML = DOCTOR_TABLE_HEADER;
@@ -144,7 +181,7 @@
     doctorThead.parentElement.parentElement.classList.remove("hidden");
     (report[key] || []).forEach((entry) => {
       const tr = document.createElement("tr");
-      tr.innerHTML = `<td>${escapeHtml(entry.name)}</td><td>${formatMoney(entry.total_share)}</td><td>${entry.count}</td>`;
+      tr.innerHTML = `<td>${escapeHtml(entry.name)}</td><td class="num">${formatMoney(entry.total_share)}</td><td class="num">${entry.count}</td>`;
       doctorTbody.appendChild(tr);
     });
   }
@@ -199,7 +236,7 @@
       summaryEl.appendChild(statCard("Xonalardan ulush", rShare));
       summaryEl.appendChild(statCard("Jami ulush", cShare + sShare + rShare));
 
-      doctorThead.innerHTML = "<tr><th>Bo'lim</th><th>Ulush</th><th>Yozuvlar soni</th></tr>";
+      doctorThead.innerHTML = "<tr><th>Bo'lim</th><th class=\"num\">Ulush</th><th class=\"num\">Yozuvlar soni</th></tr>";
       doctorTbody.innerHTML = "";
       [
         ["Ko'riklar", cShare, cCount],
@@ -207,7 +244,7 @@
         ["Xonalar", rShare, rCount],
       ].forEach(([label, share, count]) => {
         const tr = document.createElement("tr");
-        tr.innerHTML = `<td>${label}</td><td>${formatMoney(share)}</td><td>${count}</td>`;
+        tr.innerHTML = `<td>${label}</td><td class="num">${formatMoney(share)}</td><td class="num">${count}</td>`;
         doctorTbody.appendChild(tr);
       });
 
@@ -215,7 +252,7 @@
         type: "bar",
         data: {
           labels: ["Ko'riklar", "Operatsiyalar", "Xonalar"],
-          datasets: [{ label: "Shifokor ulushi", data: [cShare, sShare, rShare], backgroundColor: "#2563eb" }],
+          datasets: [{ label: "Shifokor ulushi", data: [cShare, sShare, rShare], backgroundColor: sectionColors() }],
         },
         options: { responsive: true, plugins: { legend: { display: false } } },
       });
@@ -268,6 +305,15 @@
   document.getElementById("range-form").addEventListener("submit", (event) => {
     event.preventDefault();
     loadReport();
+  });
+
+  attachMonthShortcuts({
+    fromInput: dateFromInput,
+    toInput: dateToInput,
+    currentBtn: document.getElementById("current-month-btn"),
+    previousBtn: document.getElementById("previous-month-btn"),
+    labelEl: document.getElementById("period-label"),
+    onApply: loadReport,
   });
 
   await loadDoctorSelectOptions();

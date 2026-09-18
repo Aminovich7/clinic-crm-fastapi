@@ -1313,9 +1313,10 @@ analog). All five are manager/superadmin only, with one deliberate carve-out
   `model_validator`); `status` (`staff_status` enum: `active`/`inactive`,
   mirroring `User`'s `APPROVED`/`BLOCKED` pattern exactly, including reusing
   `set_user_status`'s shape for `activate_staff`/`deactivate_staff`);
-  `hire_date` (nullable `Date`, used only as the lifetime-earnings
-  proration start for nurse/other staff — falls back to
-  `created_at.date()` if unset). Makes `specialty` nullable (was `NOT
+  `hire_date` (nullable `Date`, the proration start for nurse/other staff
+  in **both** the lifetime summary and the per-period balance — see §27.
+  The lifetime summary falls back to `created_at.date()` if unset; the
+  per-period balance deliberately does not). Makes `specialty` nullable (was `NOT
   NULL`, now only required for `role=doctor`). Drops and recreates the
   three `doctor_id` FK constraints on `consultations`/`surgeries`/`rooms`
   to point at `staff.id` instead of `doctors.id`, same `ondelete="SET
@@ -1417,7 +1418,10 @@ re-deriving.
     are added straight onto commission earnings as one combined "earned"
     figure, not tracked as a separate line.**
   - **Nurse/Other:** `prorate_fixed_salary(fixed_salary, date_from,
-    date_to)` (below) **plus** the same duty-entry sum.
+    date_to)` (below) **plus** the same duty-entry sum. **Since §27 the
+    lower bound is clamped to `hire_date`** when one is set, so nobody
+    accrues salary before they were hired and the hire month itself is
+    prorated to days actually worked.
 - **Proration** (`app/salary/calculations.py::prorate_fixed_salary`, pure,
   no DB/FastAPI imports, unit-tested standalone): splits the range into
   one segment per calendar month it touches; for each segment,
@@ -2018,3 +2022,321 @@ side either way (§2's "never persist calculated fields" rule).
   appears for them at all — blocked that temporary account afterward
   (users have no delete endpoint, only block/unblock, per §2).
 - `node --check`: pass. `pytest -q`: 61/61 (backend untouched).
+
+---
+
+## 27. Session 18 — month shortcuts app-wide, and the hire-date salary bug
+
+### 27.1 "Joriy oy" / "O'tgan oy" on every date-filtered page
+
+The two month-shortcut buttons that previously existed only on Oyliklar are
+now on **Boshqaruv paneli, Hisobotlar, Kvitansiyalar, Navbatchilik, Dorixona
+and Boshqa harajatlar** as well, together with the visible period label
+("Davr: Sentabr 2026").
+
+The calendar arithmetic was lifted out of `oyliklar.js` into `nav.js` so
+there is one implementation rather than seven: `firstAndLastOfMonth()`,
+`daysInMonth()`, `monthPeriodLabel()` and `attachMonthShortcuts()`. Oyliklar
+now consumes the shared helpers too; its local copies were deleted. The
+label stays in sync with hand-typed dates (both inputs get a `change`
+listener), and Kvitansiyalar's "Tozalash" button clears it so it can never
+advertise a range that is no longer being queried. Navbatchilik keeps its
+active filter in module-level state that only its submit handler refreshed,
+so its `onApply` updates that state as well.
+
+### 27.2 Fixed-salary staff accrued pay before they were hired
+
+**Reported by the owner.** Mehroj Hamraev was added on 2026-09-17 with
+`fixed_salary = 50,000,000` and paid a 22,000,000 avans. Filtering Oyliklar
+to **O'tgan oy (August 2026)** showed **50,000,000 still owed to him** — for
+a month in which he did not work.
+
+**Cause:** `compute_earned_amount()` (`app/salary/service.py`) called
+`prorate_fixed_salary(fixed_salary, date_from, date_to)` over whatever range
+was requested and never consulted `hire_date`. Any full calendar month
+therefore returned a full month's salary, regardless of when the person was
+hired. §2 of this document had in fact specified that `hire_date` was used
+"only as the lifetime-earnings proration start", so the per-period balance
+ignoring it was by design — that design was wrong, and both this file and the
+code are now corrected. `build_staff_lifetime_summary()` had always clamped
+correctly, so the two views previously disagreed.
+
+**Fix, confirmed with the owner before implementing** (the choice mattered
+because it changes a figure they had already called correct): the lower bound
+of the proration range is clamped to `hire_date`, which both zeroes months
+entirely before hiring *and* prorates the hire month itself to days actually
+worked. For Mehroj, September went from 50,000,000 earned / 28,000,000
+remaining to **23,333,333 earned / 1,333,333 remaining** (17–30 September is
+14 of the month's 30 days), and August to **0 / 0 / 0**.
+
+**Deliberately no `created_at` fallback.** The first implementation used
+`staff.hire_date or staff.created_at.date()`, mirroring the lifetime summary.
+That broke an existing test and, more importantly, would have silently
+**halved the September salary of Zarina Nurova and Malika Yusupova** — two
+nurses with no `hire_date` whose records happen to have been created on
+2026-09-16 — and zeroed their August. `created_at` records when a row was
+typed into the CRM, which says nothing about when the person started working,
+so using it to *reduce* pay owed is unsafe. Staff without a `hire_date`
+therefore keep the un-clamped behaviour until one is entered. The lifetime
+summary keeps its `created_at` fallback, which §2 already flags as a known
+approximation and which nobody pays out from.
+
+**Outstanding data task for the owner:** Zarina Nurova and Malika Yusupova
+still have `hire_date = NULL`, so August still reports a full month owed to
+each. Setting their hire dates in Ishchilar fixes them the same way.
+
+**Known related gap, not addressed:** `Staff` has no termination/end date, so
+someone who leaves keeps accruing salary in every future month's balance
+indefinitely — the same class of bug at the opposite end of employment.
+
+**Tests:** `tests/salary/test_earned.py::TestHireDateClamping` — five cases
+covering a month entirely before hire (0), the prorated hire month
+(23,333,333), a month fully after hire (unchanged), a range spanning the hire
+date (clamped, not zeroed), and staff without a `hire_date` (not clamped).
+Full suite: 66 passed.
+
+---
+
+## 28. Session 19 — restore, hard delete, and an audit log worth reading
+
+> **Superseded in part by §29.** The per-record-page toggle described in
+> §28.1/§28.7 and the delete snapshot in §28.3 were both removed at the
+> owner's request. Read §29 for the arrangement that actually ships.
+
+### 28.1 The prerequisite nobody had noticed: voided records were invisible
+
+Every list query hard-filtered `is_voided = False` with no way to opt in, so a
+voided record could not be seen anywhere in the UI. The `tr.voided` styling
+and the "Bekor qilingan" status label in `receipts.js` were dead code — those
+rows never reached the browser. Restore had nowhere to live until this was
+fixed.
+
+All seven list services now take `include_voided: bool = False`, and the
+matching endpoints expose it as a query parameter gated by
+`ensure_can_view_voided()` (403 for anyone but a superadmin). **Summary,
+report and balance queries were deliberately left untouched**, so voided money
+still never reaches a total.
+
+### 28.2 Restore (un-void) — superadmin only
+
+`POST /<resource>/{id}/restore` for all seven voidable resources. Voiding only
+ever set three flags (`is_voided`, `voided_at`, `voided_by_id`) and destroyed
+nothing, so a restore clears them and the record returns intact.
+
+Confirmed with the owner: **restore is superadmin-only**, even though managers
+may void. Un-voiding reverses someone else's correction and changes reported
+income, so it stays with one accountable role.
+
+The Kvitansiyalar void confirmation used to claim "Bu amalni qaytarib
+bo'lmaydi" — no longer true, and reworded to say the record can be restored.
+
+### 28.3 Hard delete — superadmin only, voided records only, always snapshotted
+
+`DELETE /<resource>/{id}`. Three deliberate safety properties:
+
+1. **Only an already-voided record can be deleted** (409 otherwise), so
+   destruction is always two separate decisions, and the row was already
+   excluded from every report — deleting it cannot silently move a figure
+   anyone has already seen.
+2. **The full row is written into the audit log first**, in the same
+   transaction, as `metadata.deleted_record`. The business row goes; the
+   audit trail keeps both the deletion and the data, so a mistaken delete can
+   still be reconstructed by hand.
+3. **Superadmin only**, with an explicit UI confirmation stating the action
+   cannot be undone.
+
+Money is snapshotted with `format(value, "f")`, not `str()` — a test caught
+psycopg returning `Decimal("1.2E+5")`, which would otherwise have landed in
+the audit log as unreadable scientific notation.
+
+Both operations live once in `app/common/voidable.py` and are shared by all
+seven resources rather than being written out fourteen times.
+
+**Deleting audit log entries was considered and rejected.** An audit log a
+superadmin can erase proves nothing, since the first thing anyone covering a
+mistake would remove is the evidence. The log stays append-only.
+
+### 28.4 Audit jurnali page
+
+Four defects fixed, all confirmed with the owner:
+
+- **"Amal bajaruvchi" printed a raw UUID.** `AuditLogRead` now carries
+  `actor_name`, resolved by a LEFT JOIN added to the existing paged query —
+  no N+1, and rows whose actor was since deleted still render (as "tizim").
+- **Actions were untranslated English** (`void_consultation`) in an otherwise
+  fully Uzbek UI. Now translated compositionally from `<verb>_<resource>`
+  rather than as a flat table, so actions from older releases still present in
+  the database (`create_doctor`, `unblock_user`) keep working, and anything
+  unrecognised falls back to the raw string instead of rendering blank.
+- **The `metadata` column was stored but never displayed.** Now a collapsible
+  cell; a deleted record's snapshot renders as a key/value table.
+- **"Resurs turi" was a typo-prone free-text box.** Now a dropdown of the
+  eleven real resource types, labelled in Uzbek.
+
+Hard-delete rows are tinted (`tr.row-danger`) so the one irreversible action
+in the app does not read like every other entry. The page also gained the
+Joriy oy / O'tgan oy shortcuts from §27.
+
+### 28.5 Tests
+
+`tests/finance/test_restore_delete.py` — 13 cases: restore clears the flags,
+restored records reappear in listings with original values intact, restoring a
+live record is rejected, restores are audited; delete is rejected on a live
+record, removes the row, and snapshots it into the audit log with money as a
+fixed-point string; the shared helpers work on a non-finance resource; and
+`include_voided` hides by default, reveals for superadmin, and 403s for a
+manager. Full suite: **79 passed**.
+
+### 28.6 Not done
+
+`Staff` still has no termination date (carried over from §27.2) — someone who
+leaves keeps accruing salary in future months.
+
+### 28.7 Follow-up — the toggle was undiscoverable
+
+The owner reported not being able to find the restore/delete buttons. Nothing
+was broken: they are on the *record* pages, not on Audit jurnali, and they
+only appear once voided rows are revealed. The reveal control was a bare
+checkbox sitting in a row of buttons, which is far too weak an affordance for
+what is the only route to restoring a record.
+
+Replaced with a labelled push-button ("Bekor qilinganlarni ko'rsatish" /
+"Faqat faol yozuvlar") that tints amber (`.toggle-on`) while active, so it is
+obvious both that the control exists and that the table is currently showing
+rows excluded from every report.
+
+---
+
+## 29. Session 20 — voided records belong to Audit Jurnali, and delete keeps nothing
+
+**Owner correction, and it invalidated the shape of §28.** Session 19 put a
+"Bekor qilinganlarni ko'rsatish" toggle plus Tiklash/O'chirish buttons on each
+of the five record pages, and left Audit Jurnali read-only. That was the wrong
+model. The owner's requirement:
+
+> "I need all the voided rows appear in the Audit Jurnali only with Tiklash to
+> bring one back and O'chirish to destroy it permanently! Once I click
+> O'chirish I dont need the info saved. Remove all that Bekor qilinganlarni
+> ko'rsatish from the record pages."
+
+### 29.1 Audit Jurnali is now the only place voided records appear
+
+New `GET /voided-records` (superadmin only) backed by
+`app/audit/voided.py::list_voided_records`, which spans all seven
+VoidableMixin tables and normalises their differing shapes into one row type:
+resource label, id, a human summary, business date, amount, when it was voided
+and by whom. Each table names its date and amount differently (a pharmacy
+entry may carry either `amount_paid` or `medicine_cost`; a salary payment uses
+`paid_at`), so `_describe()` handles that per resource rather than in the
+template.
+
+The seven queries are merged and paginated in Python instead of via a SQL
+UNION over seven differently-shaped tables. Voided records are corrections
+rather than routine data, so the row count is small and each query is already
+narrowed by `is_voided = true`.
+
+The page now has two sections: **Bekor qilingan yozuvlar** (actionable, with
+a resource-type filter and Tiklash / O'chirish per row) above **Amallar
+tarixi** (the existing append-only event log).
+
+### 29.2 Removed from the record pages
+
+The `include_voided` parameter is gone from all seven list services and their
+endpoints, along with `ensure_can_view_voided()` — with the feed in place,
+nothing used them. The toggle button, the Tiklash/O'chirish buttons, the
+`voidedActionButtons`/`attachVoidedToggle` helpers and the voided-row styling
+added in §28 were all stripped from Kvitansiyalar, Navbatchilik, Dorixona,
+Boshqa harajatlar and Oyliklar. Those pages show live records only, as before.
+
+### 29.3 A permanent delete now keeps nothing
+
+`row_snapshot()` and its JSON coercion helper are removed from
+`app/audit/service.py`, and `hard_delete_voided_record()` no longer writes
+`metadata.deleted_record`. A bare audit event (who, which resource, which id,
+when) is still recorded — that is the audit trail itself, not a copy of the
+record — but the values are gone for good. The delete confirmation text was
+corrected accordingly; it previously promised a copy would survive in the
+audit log.
+
+### 29.4 Tests
+
+`tests/finance/test_restore_delete.py` now has 14 cases. `TestHardDelete`
+asserts the audit row carries who/what/when with `metadata_ is None`.
+`TestIncludeVoidedListing` was replaced by `TestVoidedRecordsFeed`: record
+pages never show voided records, a voided record appears in the feed with the
+right summary/amount/voider, live records stay out of it, a restored record
+leaves it, and the feed spans resource types and filters by one. Full suite:
+**80 passed**.
+
+Verified against live data: all 20 voided records across the seven tables
+render in the feed with correct labels, amounts and voider names.
+
+### 29.5 Follow-up — "Amallar tarixi" removed from the page
+
+The owner does not want the raw audit event history in the interface, so the
+"Amallar tarixi" section added in §29.1 is gone. Audit Jurnali is now a single
+table: the voided records, with a resource-type filter and Tiklash / O'chirish
+per row.
+
+**Backend deliberately untouched.** Audit events are still written on every
+create/update/void/restore/delete, `AuditLogRead.actor_name` and its LEFT JOIN
+remain, and `GET /audit-logs` still serves them — the history is simply not
+displayed. Removing the recording itself would destroy the trail, which is a
+different (and much larger) decision than hiding a table.
+
+Dead CSS removed with it: `.row-danger` and the `.meta-*` rules, which only
+ever styled the event log's delete rows and its metadata cell.
+
+---
+
+## 30. Session 21 — audit trail removed entirely
+
+**Owner instruction:** rename the page to "Bekor qilingan yozuvlar", and
+"delete the trail, stop the recording!"
+
+### 30.1 Recording stopped
+
+All **33** `record_audit_event(...)` call sites were removed from
+`app/common/voidable.py` and the duty, expenses, finance, pharmacy, salary,
+staff and users services, along with the now-unused imports. No action in the
+app writes an audit event any more.
+
+### 30.2 Trail deleted
+
+`app/audit/models.py` (the `AuditLog` model) and `app/audit/service.py` (the
+recorder and the log listing) are deleted. `app/audit/schemas.py` and
+`app/audit/router.py` were reduced to the voided-records feed alone, and
+`AuditLog` was dropped from `app/db/all_models.py`. `GET /audit-logs` no
+longer exists.
+
+Migration `e1a4c7d90b26_drop_audit_logs` drops the table and its three
+indexes. **Applied to the live database: 108 audit rows were destroyed.** The
+downgrade recreates the structure but cannot bring the rows back — that is
+deliberate.
+
+### 30.3 What this did *not* affect
+
+"Kim bekor qildi" on the voided-records page never came from the audit trail.
+`voided_at` and `voided_by_id` live on the records themselves via
+`VoidableMixin`, and `list_voided_records()` joins `users` directly for the
+name. Verified after the drop: all 20 voided records still list with correct
+labels, amounts and voider names.
+
+The page keeps its `/audit-log` route and `audit_log.html` filename so
+existing bookmarks still work; only the sidebar label changed, to **"Bekor
+qilingan yozuvlar"**.
+
+### 30.4 Tests
+
+The audit-event assertions in `tests/finance/test_restore_delete.py` had
+nothing left to assert against and were replaced: `test_restore_is_audited` is
+gone, and `test_delete_is_audited_without_retaining_the_data` became
+`test_delete_leaves_no_trace`, which checks the row is gone from both the
+table and the voided feed. Full suite: **79 passed**.
+
+### 30.5 Consequence worth knowing
+
+There is now **no record of who created or edited anything**. Voiding is still
+attributed (`voided_by_id` on the record), and `created_by_id` still exists on
+finance records, so "who entered this receipt" survives — but edits, user
+blocks, staff changes and settings changes are no longer tracked at all.

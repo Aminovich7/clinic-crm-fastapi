@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.pagination import PaginatedResponse
+from app.common.voidable import hard_delete_voided_record, restore_voided_record
 from app.db.session import get_db
 from app.finance.models import ConsultationType
 from app.finance.reports import (
@@ -149,6 +150,42 @@ async def void_consultation_endpoint(
     return await void_consultation(db, actor=actor, consultation=record)
 
 
+@router.post("/consultations/{consultation_id}/restore", response_model=ConsultationRead)
+async def restore_consultation_endpoint(
+    consultation_id: int,
+    actor: User = Depends(require_roles(UserRoleEnum.SUPERADMIN)),
+    db: AsyncSession = Depends(get_db),
+):
+    record = await get_consultation_or_404(db, consultation_id)
+    return await restore_voided_record(
+        db,
+        actor=actor,
+        obj=record,
+        action="restore_consultation",
+        resource_type="consultation",
+    )
+
+
+@router.delete("/consultations/{consultation_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_consultation_endpoint(
+    consultation_id: int,
+    actor: User = Depends(require_roles(UserRoleEnum.SUPERADMIN)),
+    db: AsyncSession = Depends(get_db),
+):
+    """Permanently delete an already-voided record (superadmin only).
+
+    The full row is written into the audit log before it is destroyed.
+    """
+    record = await get_consultation_or_404(db, consultation_id)
+    await hard_delete_voided_record(
+        db,
+        actor=actor,
+        obj=record,
+        action="delete_consultation",
+        resource_type="consultation",
+    )
+
+
 # ---------------------------------------------------------------------------
 # Surgeries
 # ---------------------------------------------------------------------------
@@ -224,6 +261,42 @@ async def void_surgery_endpoint(
     return await void_surgery(db, actor=actor, surgery=record)
 
 
+@router.post("/surgeries/{surgery_id}/restore", response_model=SurgeryRead)
+async def restore_surgery_endpoint(
+    surgery_id: int,
+    actor: User = Depends(require_roles(UserRoleEnum.SUPERADMIN)),
+    db: AsyncSession = Depends(get_db),
+):
+    record = await get_surgery_or_404(db, surgery_id)
+    return await restore_voided_record(
+        db,
+        actor=actor,
+        obj=record,
+        action="restore_surgery",
+        resource_type="surgery",
+    )
+
+
+@router.delete("/surgeries/{surgery_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_surgery_endpoint(
+    surgery_id: int,
+    actor: User = Depends(require_roles(UserRoleEnum.SUPERADMIN)),
+    db: AsyncSession = Depends(get_db),
+):
+    """Permanently delete an already-voided record (superadmin only).
+
+    The full row is written into the audit log before it is destroyed.
+    """
+    record = await get_surgery_or_404(db, surgery_id)
+    await hard_delete_voided_record(
+        db,
+        actor=actor,
+        obj=record,
+        action="delete_surgery",
+        resource_type="surgery",
+    )
+
+
 # ---------------------------------------------------------------------------
 # Rooms
 # ---------------------------------------------------------------------------
@@ -297,6 +370,42 @@ async def void_room_endpoint(
 ):
     record = await get_room_or_404(db, room_id)
     return await void_room(db, actor=actor, room=record)
+
+
+@router.post("/rooms/{room_id}/restore", response_model=RoomRead)
+async def restore_room_endpoint(
+    room_id: int,
+    actor: User = Depends(require_roles(UserRoleEnum.SUPERADMIN)),
+    db: AsyncSession = Depends(get_db),
+):
+    record = await get_room_or_404(db, room_id)
+    return await restore_voided_record(
+        db,
+        actor=actor,
+        obj=record,
+        action="restore_room",
+        resource_type="room",
+    )
+
+
+@router.delete("/rooms/{room_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_room_endpoint(
+    room_id: int,
+    actor: User = Depends(require_roles(UserRoleEnum.SUPERADMIN)),
+    db: AsyncSession = Depends(get_db),
+):
+    """Permanently delete an already-voided record (superadmin only).
+
+    The full row is written into the audit log before it is destroyed.
+    """
+    record = await get_room_or_404(db, room_id)
+    await hard_delete_voided_record(
+        db,
+        actor=actor,
+        obj=record,
+        action="delete_room",
+        resource_type="room",
+    )
 
 
 # ---------------------------------------------------------------------------

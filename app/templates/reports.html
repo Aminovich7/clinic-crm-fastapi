@@ -14,7 +14,10 @@
       <input type="date" id="date_to" required>
     </div>
     <button type="submit">Qo'llash</button>
+    <button type="button" class="secondary" id="current-month-btn">Joriy oy</button>
+    <button type="button" class="secondary" id="previous-month-btn">O'tgan oy</button>
   </form>
+  <p class="muted" id="period-label"></p>
 </div>
 
 <div id="error-container"></div>
@@ -48,7 +51,7 @@
 <div class="table-wrap">
   <table>
     <thead id="doctor-thead">
-      <tr><th>Shifokor</th><th>Ulush jami</th><th>Yozuvlar soni</th></tr>
+      <tr><th>Shifokor</th><th class="num">Ulush jami</th><th class="num">Yozuvlar soni</th></tr>
     </thead>
     <tbody id="doctor-tbody"></tbody>
   </table>

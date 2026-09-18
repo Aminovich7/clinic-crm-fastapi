@@ -127,8 +127,11 @@
 
       const params = new URLSearchParams({ page, page_size: pageSize });
       try {
-        const data = await apiFetch(`${listEndpoint}?${params.toString()}`);
+        const data = await withLoading(tbody.closest("table"), () => apiFetch(`${listEndpoint}?${params.toString()}`));
 
+        if (data.items.length === 0) {
+          renderEmpty(tbody, columnCount(tbody.closest("table")), "Ma'lumot topilmadi");
+        }
         data.items.forEach((person) => {
           const tr = document.createElement("tr");
           const isBlocked = person.status === "blocked";

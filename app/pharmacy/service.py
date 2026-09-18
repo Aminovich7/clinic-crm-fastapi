@@ -6,7 +6,6 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.audit.service import record_audit_event
 from app.finance.calculations import money
 from app.finance.reports import get_business_datetime_range
 from app.pharmacy.models import PharmacyEntry
@@ -16,10 +15,8 @@ from app.users.models import User
 CLINIC_TZ = ZoneInfo("Asia/Tashkent")
 ZERO = Decimal("0")
 
-
 def _resolve_create_date(value: datetime | None) -> datetime:
     return value if value is not None else datetime.now(CLINIC_TZ)
-
 
 async def create_pharmacy_entry(
     db: AsyncSession,
@@ -38,25 +35,15 @@ async def create_pharmacy_entry(
     db.add(record)
     await db.flush()
 
-    await record_audit_event(
-        db,
-        actor=actor,
-        action="create_pharmacy_entry",
-        resource_type="pharmacy_entry",
-        resource_id=record.id,
-    )
-
     await db.commit()
     await db.refresh(record)
     return record
-
 
 async def get_pharmacy_entry_or_404(db: AsyncSession, pharmacy_entry_id: int) -> PharmacyEntry:
     record = await db.get(PharmacyEntry, pharmacy_entry_id)
     if record is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Pharmacy entry not found")
     return record
-
 
 async def list_pharmacy_entries(
     db: AsyncSession,
@@ -85,7 +72,6 @@ async def list_pharmacy_entries(
     result = await db.execute(stmt)
     return list(result.scalars().all()), total
 
-
 async def update_pharmacy_entry(
     db: AsyncSession,
     *,
@@ -108,19 +94,9 @@ async def update_pharmacy_entry(
             value = value.strip() or None
         setattr(pharmacy_entry, field, value)
 
-    await record_audit_event(
-        db,
-        actor=actor,
-        action="update_pharmacy_entry",
-        resource_type="pharmacy_entry",
-        resource_id=pharmacy_entry.id,
-        metadata={"changed_fields": list(changes.keys())},
-    )
-
     await db.commit()
     await db.refresh(pharmacy_entry)
     return pharmacy_entry
-
 
 async def void_pharmacy_entry(
     db: AsyncSession, *, actor: User, pharmacy_entry: PharmacyEntry
@@ -132,18 +108,9 @@ async def void_pharmacy_entry(
     pharmacy_entry.voided_at = datetime.now(ZoneInfo("UTC"))
     pharmacy_entry.voided_by_id = actor.id
 
-    await record_audit_event(
-        db,
-        actor=actor,
-        action="void_pharmacy_entry",
-        resource_type="pharmacy_entry",
-        resource_id=pharmacy_entry.id,
-    )
-
     await db.commit()
     await db.refresh(pharmacy_entry)
     return pharmacy_entry
-
 
 async def build_pharmacy_balance(
     db: AsyncSession,

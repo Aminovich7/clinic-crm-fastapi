@@ -6,7 +6,6 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.audit.service import record_audit_event
 from app.expenses.models import Expense
 from app.expenses.schemas import ExpenseCreate, ExpenseSummary, ExpenseUpdate
 from app.finance.calculations import money
@@ -16,10 +15,8 @@ from app.users.models import User
 CLINIC_TZ = ZoneInfo("Asia/Tashkent")
 ZERO = Decimal("0")
 
-
 def _resolve_create_date(value: datetime | None) -> datetime:
     return value if value is not None else datetime.now(CLINIC_TZ)
-
 
 def _apply_filters(stmt, *, date_from, date_to, search):
     start, end = get_business_datetime_range(date_from, date_to)
@@ -30,7 +27,6 @@ def _apply_filters(stmt, *, date_from, date_to, search):
     if search:
         stmt = stmt.where(Expense.title.ilike(f"%{search.strip()}%"))
     return stmt
-
 
 async def create_expense(db: AsyncSession, *, actor: User, data: ExpenseCreate) -> Expense:
     record = Expense(
@@ -43,25 +39,15 @@ async def create_expense(db: AsyncSession, *, actor: User, data: ExpenseCreate) 
     db.add(record)
     await db.flush()
 
-    await record_audit_event(
-        db,
-        actor=actor,
-        action="create_expense",
-        resource_type="expense",
-        resource_id=record.id,
-    )
-
     await db.commit()
     await db.refresh(record)
     return record
-
 
 async def get_expense_or_404(db: AsyncSession, expense_id: int) -> Expense:
     record = await db.get(Expense, expense_id)
     if record is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Expense not found")
     return record
-
 
 async def list_expenses(
     db: AsyncSession,
@@ -86,7 +72,6 @@ async def list_expenses(
     result = await db.execute(stmt)
     return list(result.scalars().all()), total
 
-
 async def sum_expenses(
     db: AsyncSession,
     *,
@@ -105,7 +90,6 @@ async def sum_expenses(
 
     return ExpenseSummary(total_amount=money(total_amount), count=count)
 
-
 async def update_expense(
     db: AsyncSession, *, actor: User, expense: Expense, data: ExpenseUpdate
 ) -> Expense:
@@ -116,19 +100,9 @@ async def update_expense(
             value = value.strip()
         setattr(expense, field, value)
 
-    await record_audit_event(
-        db,
-        actor=actor,
-        action="update_expense",
-        resource_type="expense",
-        resource_id=expense.id,
-        metadata={"changed_fields": list(changes.keys())},
-    )
-
     await db.commit()
     await db.refresh(expense)
     return expense
-
 
 async def void_expense(db: AsyncSession, *, actor: User, expense: Expense) -> Expense:
     if expense.is_voided:
@@ -137,14 +111,6 @@ async def void_expense(db: AsyncSession, *, actor: User, expense: Expense) -> Ex
     expense.is_voided = True
     expense.voided_at = datetime.now(ZoneInfo("UTC"))
     expense.voided_by_id = actor.id
-
-    await record_audit_event(
-        db,
-        actor=actor,
-        action="void_expense",
-        resource_type="expense",
-        resource_id=expense.id,
-    )
 
     await db.commit()
     await db.refresh(expense)

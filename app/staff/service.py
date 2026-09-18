@@ -2,14 +2,12 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.audit.service import record_audit_event
 from app.duty.models import DutyEntry
 from app.finance.models import Consultation, Room, Surgery
 from app.salary.models import SalaryPayment
 from app.staff.models import Staff, StaffRoleEnum, StaffStatusEnum
 from app.staff.schemas import StaffCreate, StaffUpdate
 from app.users.models import User, UserRoleEnum
-
 
 def _validate_role_fields(*, role: StaffRoleEnum, specialty: str | None, fixed_salary) -> None:
     if role == StaffRoleEnum.DOCTOR:
@@ -23,7 +21,6 @@ def _validate_role_fields(*, role: StaffRoleEnum, specialty: str | None, fixed_s
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="fixed_salary is not applicable to doctors",
             )
-
 
 async def create_staff(
     db: AsyncSession,
@@ -44,19 +41,10 @@ async def create_staff(
     db.add(staff)
     await db.flush()
 
-    await record_audit_event(
-        db,
-        actor=actor,
-        action="create_staff",
-        resource_type="staff",
-        resource_id=staff.id,
-    )
-
     await db.commit()
     await db.refresh(staff)
 
     return staff
-
 
 async def get_staff_or_404(db: AsyncSession, staff_id: int) -> Staff:
     staff = await db.get(Staff, staff_id)
@@ -68,7 +56,6 @@ async def get_staff_or_404(db: AsyncSession, staff_id: int) -> Staff:
         )
 
     return staff
-
 
 async def update_staff(
     db: AsyncSession,
@@ -91,20 +78,10 @@ async def update_staff(
         fixed_salary=staff.fixed_salary,
     )
 
-    await record_audit_event(
-        db,
-        actor=actor,
-        action="update_staff",
-        resource_type="staff",
-        resource_id=staff.id,
-        metadata={"changed_fields": list(changes.keys())},
-    )
-
     await db.commit()
     await db.refresh(staff)
 
     return staff
-
 
 async def list_staff(
     db: AsyncSession,
@@ -148,7 +125,6 @@ async def list_staff(
 
     return list(result.scalars().all()), total
 
-
 async def list_staff_options(
     db: AsyncSession,
     *,
@@ -174,42 +150,23 @@ async def list_staff_options(
     result = await db.execute(stmt)
     return list(result.scalars().all())
 
-
 async def activate_staff(db: AsyncSession, *, actor: User, staff: Staff) -> Staff:
     if staff.status != StaffStatusEnum.ACTIVE:
         staff.status = StaffStatusEnum.ACTIVE
-
-        await record_audit_event(
-            db,
-            actor=actor,
-            action="activate_staff",
-            resource_type="staff",
-            resource_id=staff.id,
-        )
 
         await db.commit()
         await db.refresh(staff)
 
     return staff
-
 
 async def deactivate_staff(db: AsyncSession, *, actor: User, staff: Staff) -> Staff:
     if staff.status != StaffStatusEnum.INACTIVE:
         staff.status = StaffStatusEnum.INACTIVE
 
-        await record_audit_event(
-            db,
-            actor=actor,
-            action="deactivate_staff",
-            resource_type="staff",
-            resource_id=staff.id,
-        )
-
         await db.commit()
         await db.refresh(staff)
 
     return staff
-
 
 async def _staff_has_financial_history(db: AsyncSession, staff_id: int) -> bool:
     checks = (
@@ -227,7 +184,6 @@ async def _staff_has_financial_history(db: AsyncSession, staff_id: int) -> bool:
 
     return False
 
-
 async def delete_staff(db: AsyncSession, *, actor: User, staff: Staff) -> None:
     if await _staff_has_financial_history(db, staff.id):
         raise HTTPException(
@@ -239,14 +195,6 @@ async def delete_staff(db: AsyncSession, *, actor: User, staff: Staff) -> None:
         )
 
     staff_id = staff.id
-
-    await record_audit_event(
-        db,
-        actor=actor,
-        action="delete_staff",
-        resource_type="staff",
-        resource_id=staff_id,
-    )
 
     await db.delete(staff)
     await db.commit()

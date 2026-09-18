@@ -6,7 +6,6 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.audit.service import record_audit_event
 from app.finance.models import Consultation, ConsultationType, Room, Surgery, SystemSetting
 from app.finance.reports import get_business_datetime_range
 from app.finance.schemas import (
@@ -25,11 +24,9 @@ CLINIC_TZ = ZoneInfo("Asia/Tashkent")
 
 SETTINGS_ROW_ID = 1
 
-
 # ---------------------------------------------------------------------------
 # Shared helpers
 # ---------------------------------------------------------------------------
-
 
 async def _require_doctor(db: AsyncSession, doctor_id: int | None) -> None:
     if doctor_id is None:
@@ -41,7 +38,6 @@ async def _require_doctor(db: AsyncSession, doctor_id: int | None) -> None:
             detail="Doctor not found",
         )
 
-
 def _require_expense_not_greater_than_income(*, amount: Decimal, expense: Decimal) -> None:
     if expense > amount:
         raise HTTPException(
@@ -49,16 +45,13 @@ def _require_expense_not_greater_than_income(*, amount: Decimal, expense: Decima
             detail="Expense cannot exceed amount",
         )
 
-
 def _resolve_create_date(date_value: datetime | None) -> datetime:
     return date_value if date_value is not None else datetime.now(CLINIC_TZ)
-
 
 def _apply_assistant_ownership(stmt, model, actor: User):
     if actor.role == UserRoleEnum.ASSISTANT:
         stmt = stmt.where(model.created_by_id == actor.id)
     return stmt
-
 
 def _forbid_if_not_owner_or_privileged(record, actor: User) -> None:
     if actor.role == UserRoleEnum.ASSISTANT and record.created_by_id != actor.id:
@@ -67,11 +60,9 @@ def _forbid_if_not_owner_or_privileged(record, actor: User) -> None:
             detail="You do not have permission to view this record",
         )
 
-
 # ---------------------------------------------------------------------------
 # Finance settings (dynamic minus_beshming default)
 # ---------------------------------------------------------------------------
-
 
 async def get_finance_settings(db: AsyncSession) -> SystemSetting:
     settings_row = await db.get(SystemSetting, SETTINGS_ROW_ID)
@@ -85,11 +76,9 @@ async def get_finance_settings(db: AsyncSession) -> SystemSetting:
         await db.refresh(settings_row)
     return settings_row
 
-
 async def get_minus_beshming_default(db: AsyncSession) -> Decimal:
     settings_row = await get_finance_settings(db)
     return settings_row.default_minus_beshming
-
 
 async def update_finance_settings(
     db: AsyncSession, *, actor: User, data: FinanceSettingsUpdate
@@ -99,24 +88,13 @@ async def update_finance_settings(
     settings_row.default_minus_beshming = data.default_minus_beshming
     settings_row.updated_by_id = actor.id
 
-    await record_audit_event(
-        db,
-        actor=actor,
-        action="update_finance_settings",
-        resource_type="finance_settings",
-        resource_id=SETTINGS_ROW_ID,
-        metadata={"default_minus_beshming": str(data.default_minus_beshming)},
-    )
-
     await db.commit()
     await db.refresh(settings_row)
     return settings_row
 
-
 # ---------------------------------------------------------------------------
 # Consultations
 # ---------------------------------------------------------------------------
-
 
 async def create_consultation(
     db: AsyncSession,
@@ -146,25 +124,15 @@ async def create_consultation(
     db.add(record)
     await db.flush()
 
-    await record_audit_event(
-        db,
-        actor=actor,
-        action="create_consultation",
-        resource_type="consultation",
-        resource_id=record.id,
-    )
-
     await db.commit()
     await db.refresh(record)
     return record
-
 
 async def get_consultation_or_404(db: AsyncSession, consultation_id: int) -> Consultation:
     record = await db.get(Consultation, consultation_id)
     if record is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Consultation not found")
     return record
-
 
 async def list_consultations(
     db: AsyncSession,
@@ -194,7 +162,6 @@ async def list_consultations(
     if end:
         stmt = stmt.where(Consultation.date < end)
 
-
     count_stmt = select(func.count()).select_from(stmt.order_by(None).subquery())
     total = (await db.execute(count_stmt)).scalar_one()
 
@@ -205,7 +172,6 @@ async def list_consultations(
     )
     result = await db.execute(stmt)
     return list(result.scalars().all()), total
-
 
 async def update_consultation(
     db: AsyncSession, *, actor: User, consultation: Consultation, data: ConsultationUpdate
@@ -224,19 +190,9 @@ async def update_consultation(
     for field, value in changes.items():
         setattr(consultation, field, value)
 
-    await record_audit_event(
-        db,
-        actor=actor,
-        action="update_consultation",
-        resource_type="consultation",
-        resource_id=consultation.id,
-        metadata={"changed_fields": list(changes.keys())},
-    )
-
     await db.commit()
     await db.refresh(consultation)
     return consultation
-
 
 async def void_consultation(db: AsyncSession, *, actor: User, consultation: Consultation) -> Consultation:
     if consultation.is_voided:
@@ -246,23 +202,13 @@ async def void_consultation(db: AsyncSession, *, actor: User, consultation: Cons
     consultation.voided_at = datetime.now(ZoneInfo("UTC"))
     consultation.voided_by_id = actor.id
 
-    await record_audit_event(
-        db,
-        actor=actor,
-        action="void_consultation",
-        resource_type="consultation",
-        resource_id=consultation.id,
-    )
-
     await db.commit()
     await db.refresh(consultation)
     return consultation
 
-
 # ---------------------------------------------------------------------------
 # Surgeries
 # ---------------------------------------------------------------------------
-
 
 async def create_surgery(db: AsyncSession, *, actor: User, data: SurgeryCreate) -> Surgery:
     await _require_doctor(db, data.doctor_id)
@@ -281,25 +227,15 @@ async def create_surgery(db: AsyncSession, *, actor: User, data: SurgeryCreate) 
     db.add(record)
     await db.flush()
 
-    await record_audit_event(
-        db,
-        actor=actor,
-        action="create_surgery",
-        resource_type="surgery",
-        resource_id=record.id,
-    )
-
     await db.commit()
     await db.refresh(record)
     return record
-
 
 async def get_surgery_or_404(db: AsyncSession, surgery_id: int) -> Surgery:
     record = await db.get(Surgery, surgery_id)
     if record is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Surgery not found")
     return record
-
 
 async def list_surgeries(
     db: AsyncSession,
@@ -326,7 +262,6 @@ async def list_surgeries(
     if end:
         stmt = stmt.where(Surgery.date < end)
 
-
     count_stmt = select(func.count()).select_from(stmt.order_by(None).subquery())
     total = (await db.execute(count_stmt)).scalar_one()
 
@@ -337,7 +272,6 @@ async def list_surgeries(
     )
     result = await db.execute(stmt)
     return list(result.scalars().all()), total
-
 
 async def update_surgery(
     db: AsyncSession, *, actor: User, surgery: Surgery, data: SurgeryUpdate
@@ -354,19 +288,9 @@ async def update_surgery(
     for field, value in changes.items():
         setattr(surgery, field, value)
 
-    await record_audit_event(
-        db,
-        actor=actor,
-        action="update_surgery",
-        resource_type="surgery",
-        resource_id=surgery.id,
-        metadata={"changed_fields": list(changes.keys())},
-    )
-
     await db.commit()
     await db.refresh(surgery)
     return surgery
-
 
 async def void_surgery(db: AsyncSession, *, actor: User, surgery: Surgery) -> Surgery:
     if surgery.is_voided:
@@ -376,23 +300,13 @@ async def void_surgery(db: AsyncSession, *, actor: User, surgery: Surgery) -> Su
     surgery.voided_at = datetime.now(ZoneInfo("UTC"))
     surgery.voided_by_id = actor.id
 
-    await record_audit_event(
-        db,
-        actor=actor,
-        action="void_surgery",
-        resource_type="surgery",
-        resource_id=surgery.id,
-    )
-
     await db.commit()
     await db.refresh(surgery)
     return surgery
 
-
 # ---------------------------------------------------------------------------
 # Rooms — no expense concept at all
 # ---------------------------------------------------------------------------
-
 
 async def create_room(db: AsyncSession, *, actor: User, data: RoomCreate) -> Room:
     await _require_doctor(db, data.doctor_id)
@@ -409,25 +323,15 @@ async def create_room(db: AsyncSession, *, actor: User, data: RoomCreate) -> Roo
     db.add(record)
     await db.flush()
 
-    await record_audit_event(
-        db,
-        actor=actor,
-        action="create_room",
-        resource_type="room",
-        resource_id=record.id,
-    )
-
     await db.commit()
     await db.refresh(record)
     return record
-
 
 async def get_room_or_404(db: AsyncSession, room_id: int) -> Room:
     record = await db.get(Room, room_id)
     if record is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Room record not found")
     return record
-
 
 async def list_rooms(
     db: AsyncSession,
@@ -454,7 +358,6 @@ async def list_rooms(
     if end:
         stmt = stmt.where(Room.date < end)
 
-
     count_stmt = select(func.count()).select_from(stmt.order_by(None).subquery())
     total = (await db.execute(count_stmt)).scalar_one()
 
@@ -466,7 +369,6 @@ async def list_rooms(
     result = await db.execute(stmt)
     return list(result.scalars().all()), total
 
-
 async def update_room(db: AsyncSession, *, actor: User, room: Room, data: RoomUpdate) -> Room:
     changes = data.model_dump(exclude_unset=True)
 
@@ -476,19 +378,9 @@ async def update_room(db: AsyncSession, *, actor: User, room: Room, data: RoomUp
     for field, value in changes.items():
         setattr(room, field, value)
 
-    await record_audit_event(
-        db,
-        actor=actor,
-        action="update_room",
-        resource_type="room",
-        resource_id=room.id,
-        metadata={"changed_fields": list(changes.keys())},
-    )
-
     await db.commit()
     await db.refresh(room)
     return room
-
 
 async def void_room(db: AsyncSession, *, actor: User, room: Room) -> Room:
     if room.is_voided:
@@ -497,14 +389,6 @@ async def void_room(db: AsyncSession, *, actor: User, room: Room) -> Room:
     room.is_voided = True
     room.voided_at = datetime.now(ZoneInfo("UTC"))
     room.voided_by_id = actor.id
-
-    await record_audit_event(
-        db,
-        actor=actor,
-        action="void_room",
-        resource_type="room",
-        resource_id=room.id,
-    )
 
     await db.commit()
     await db.refresh(room)

@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.pagination import PaginatedResponse
+from app.common.voidable import hard_delete_voided_record, restore_voided_record
 from app.db.session import get_db
 from app.duty.schemas import DutyEntryCreate, DutyEntryRead, DutyEntryUpdate
 from app.duty.service import (
@@ -37,7 +38,7 @@ async def list_duty_entries_endpoint(
     date_to: date | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
-    _: User = Depends(require_roles(*MANAGE_ROLES)),
+    actor: User = Depends(require_roles(*MANAGE_ROLES)),
     db: AsyncSession = Depends(get_db),
 ):
     try:
@@ -84,3 +85,39 @@ async def void_duty_entry_endpoint(
 ):
     record = await get_duty_entry_or_404(db, duty_entry_id)
     return await void_duty_entry(db, actor=actor, duty_entry=record)
+
+
+@router.post("/{duty_entry_id}/restore", response_model=DutyEntryRead)
+async def restore_duty_entry_endpoint(
+    duty_entry_id: int,
+    actor: User = Depends(require_roles(UserRoleEnum.SUPERADMIN)),
+    db: AsyncSession = Depends(get_db),
+):
+    record = await get_duty_entry_or_404(db, duty_entry_id)
+    return await restore_voided_record(
+        db,
+        actor=actor,
+        obj=record,
+        action="restore_duty_entry",
+        resource_type="duty_entry",
+    )
+
+
+@router.delete("/{duty_entry_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_duty_entry_endpoint(
+    duty_entry_id: int,
+    actor: User = Depends(require_roles(UserRoleEnum.SUPERADMIN)),
+    db: AsyncSession = Depends(get_db),
+):
+    """Permanently delete an already-voided record (superadmin only).
+
+    The full row is written into the audit log before it is destroyed.
+    """
+    record = await get_duty_entry_or_404(db, duty_entry_id)
+    await hard_delete_voided_record(
+        db,
+        actor=actor,
+        obj=record,
+        action="delete_duty_entry",
+        resource_type="duty_entry",
+    )
