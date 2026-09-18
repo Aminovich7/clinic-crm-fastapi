@@ -5,6 +5,7 @@ from decimal import Decimal
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.common.pagination import PaginatedResponse, PaginationParams
+from app.common.validators import reject_explicit_null
 from app.common.types import Money
 from app.finance.models import ConsultationType
 
@@ -60,6 +61,11 @@ class ConsultationUpdate(BaseModel):
         ge=0,
     )
     doctor_id: int | None = None
+    # minus_beshming and doctor_id are nullable columns: an explicit null
+    # clears them, which is a supported edit.
+    _no_nulls = reject_explicit_null(
+        "type", "receipt_number", "date", "amount", "doctor_percent"
+    )
 
 
 class ConsultationRead(BaseModel):
@@ -101,6 +107,9 @@ class SurgeryUpdate(BaseModel):
         le=100,
     )
     doctor_id: int | None = None
+    _no_nulls = reject_explicit_null(
+        "receipt_number", "date", "amount", "surgery_expense", "doctor_percent"
+    )
 
 
 class SurgeryRead(BaseModel):
@@ -145,6 +154,8 @@ class RoomUpdate(BaseModel):
         le=100,
     )
     doctor_id: int | None = None
+    # rooms.receipt_number is itself nullable, so it stays clearable.
+    _no_nulls = reject_explicit_null("date", "amount", "doctor_percent")
 
 
 class RoomRead(BaseModel):

@@ -2,8 +2,7 @@
 
 Seven resource types carry VoidableMixin (consultations, surgeries, rooms,
 duty entries, expenses, pharmacy entries and salary payments). Rather than
-fourteen near-identical service functions, both operations live here and each
-router supplies its own audit `action` and `resource_type` strings.
+fourteen near-identical service functions, both operations live here.
 
 Design rules, both deliberate:
 
@@ -22,13 +21,44 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.users.models import User
 
+def forbid_edit_if_voided(obj) -> None:
+    """409 if `obj` is voided. Call before applying any update.
+
+    Voiding is how a record is taken out of circulation, and Audit Jurnali —
+    the only page that surfaces voided records — offers exactly two actions on
+    them, restore and delete. Editing was never offered by the UI (every
+    "Tahrirlash" button renders behind `!record.is_voided`) but nothing
+    stopped a PATCH from reaching the service, and a record edited while
+    voided comes back with different figures than the ones that were voided
+    if a superadmin later restores it.
+    """
+    if obj.is_voided:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "A voided record cannot be edited. Restore it first.",
+        )
+
+def hide_if_voided(obj, detail: str):
+    """404 if `obj` is voided, else `obj`.
+
+    The list endpoints all filter `is_voided == False`, so a voided record is
+    already absent from every listing; the single-record getters returned it
+    anyway. Voided records are surfaced through /voided-records
+    (superadmin-only) and nowhere else, so this keeps the two consistent.
+
+    Deliberately applied at the router, not inside `get_*_or_404`: restore and
+    delete both load their target through those helpers and must keep seeing
+    voided rows.
+    """
+    if obj.is_voided:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail)
+    return obj
+
 async def restore_voided_record(
     db: AsyncSession,
     *,
     actor: User,
     obj,
-    action: str,
-    resource_type: str,
 ):
     """Un-void a record, putting it back into reports and listings.
 
@@ -54,16 +84,13 @@ async def hard_delete_voided_record(
     *,
     actor: User,
     obj,
-    action: str,
-    resource_type: str,
 ) -> None:
     """Permanently and irreversibly remove a voided record.
 
-    Nothing of the record's contents is retained: the owner explicitly does
-    not want deleted data kept anywhere. A bare audit event recording who
-    deleted which record, and when, is still written — that is the audit
-    trail itself rather than a copy of the record — but the values are gone
-    for good, so this really is a permanent delete.
+    Nothing of the record's contents is retained anywhere: the owner
+    explicitly does not want deleted data kept. There is no audit-log copy
+    either — the audit_logs table was dropped in migration e1a4c7d90b26 —
+    so once this returns, the record's values are gone for good.
     """
     if not obj.is_voided:
         raise HTTPException(

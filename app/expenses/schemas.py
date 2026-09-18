@@ -5,6 +5,7 @@ from decimal import Decimal
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.common.types import Money
+from app.common.validators import reject_explicit_null
 
 
 class ExpenseCreate(BaseModel):
@@ -18,6 +19,7 @@ class ExpenseUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=255)
     amount: Decimal | None = Field(default=None, ge=0)
     date: datetime | None = None
+    _no_nulls = reject_explicit_null("title", "amount", "date")
 
 
 class ExpenseRead(BaseModel):

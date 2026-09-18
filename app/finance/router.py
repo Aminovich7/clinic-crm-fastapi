@@ -6,7 +6,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.pagination import PaginatedResponse
-from app.common.voidable import hard_delete_voided_record, restore_voided_record
+from app.common.voidable import (
+    hard_delete_voided_record,
+    hide_if_voided,
+    restore_voided_record,
+)
 from app.db.session import get_db
 from app.finance.models import ConsultationType
 from app.finance.reports import (
@@ -126,7 +130,7 @@ async def get_consultation_endpoint(
 ):
     record = await get_consultation_or_404(db, consultation_id)
     _forbid_if_not_owner(record, actor)
-    return record
+    return hide_if_voided(record, "Consultation not found")
 
 
 @router.patch("/consultations/{consultation_id}", response_model=ConsultationRead)
@@ -161,8 +165,6 @@ async def restore_consultation_endpoint(
         db,
         actor=actor,
         obj=record,
-        action="restore_consultation",
-        resource_type="consultation",
     )
 
 
@@ -174,15 +176,16 @@ async def delete_consultation_endpoint(
 ):
     """Permanently delete an already-voided record (superadmin only).
 
-    The full row is written into the audit log before it is destroyed.
+    Irreversible: nothing of the record is kept anywhere, by design. The
+    record must already be voided, which holds by construction because Audit
+    Jurnali is the only page offering this action and it lists only voided
+    records.
     """
     record = await get_consultation_or_404(db, consultation_id)
     await hard_delete_voided_record(
         db,
         actor=actor,
         obj=record,
-        action="delete_consultation",
-        resource_type="consultation",
     )
 
 
@@ -237,7 +240,7 @@ async def get_surgery_endpoint(
 ):
     record = await get_surgery_or_404(db, surgery_id)
     _forbid_if_not_owner(record, actor)
-    return record
+    return hide_if_voided(record, "Surgery not found")
 
 
 @router.patch("/surgeries/{surgery_id}", response_model=SurgeryRead)
@@ -272,8 +275,6 @@ async def restore_surgery_endpoint(
         db,
         actor=actor,
         obj=record,
-        action="restore_surgery",
-        resource_type="surgery",
     )
 
 
@@ -285,15 +286,16 @@ async def delete_surgery_endpoint(
 ):
     """Permanently delete an already-voided record (superadmin only).
 
-    The full row is written into the audit log before it is destroyed.
+    Irreversible: nothing of the record is kept anywhere, by design. The
+    record must already be voided, which holds by construction because Audit
+    Jurnali is the only page offering this action and it lists only voided
+    records.
     """
     record = await get_surgery_or_404(db, surgery_id)
     await hard_delete_voided_record(
         db,
         actor=actor,
         obj=record,
-        action="delete_surgery",
-        resource_type="surgery",
     )
 
 
@@ -348,7 +350,7 @@ async def get_room_endpoint(
 ):
     record = await get_room_or_404(db, room_id)
     _forbid_if_not_owner(record, actor)
-    return record
+    return hide_if_voided(record, "Room record not found")
 
 
 @router.patch("/rooms/{room_id}", response_model=RoomRead)
@@ -383,8 +385,6 @@ async def restore_room_endpoint(
         db,
         actor=actor,
         obj=record,
-        action="restore_room",
-        resource_type="room",
     )
 
 
@@ -396,15 +396,16 @@ async def delete_room_endpoint(
 ):
     """Permanently delete an already-voided record (superadmin only).
 
-    The full row is written into the audit log before it is destroyed.
+    Irreversible: nothing of the record is kept anywhere, by design. The
+    record must already be voided, which holds by construction because Audit
+    Jurnali is the only page offering this action and it lists only voided
+    records.
     """
     record = await get_room_or_404(db, room_id)
     await hard_delete_voided_record(
         db,
         actor=actor,
         obj=record,
-        action="delete_room",
-        resource_type="room",
     )
 
 

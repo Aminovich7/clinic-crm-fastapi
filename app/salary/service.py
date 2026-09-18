@@ -6,6 +6,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.common.voidable import forbid_edit_if_voided
 from app.duty.models import DutyEntry
 from app.finance.calculations import consultation_totals, money, room_totals, surgery_totals
 from app.finance.models import Consultation, Room, Surgery
@@ -23,6 +24,27 @@ from app.users.models import User
 
 CLINIC_TZ = ZoneInfo("Asia/Tashkent")
 ZERO = Decimal("0")
+
+# (model + the columns to select, per-record totals function, argument
+# extractor). Declared once so _sum_doctor_share and its batched twin can
+# never read different columns or apply different arithmetic.
+_DOCTOR_SHARE_SOURCES = (
+    (
+        (Consultation, Consultation.amount, Consultation.minus_beshming, Consultation.doctor_percent),
+        consultation_totals,
+        lambda r: (r.minus_beshming, r.doctor_percent),
+    ),
+    (
+        (Surgery, Surgery.amount, Surgery.surgery_expense, Surgery.doctor_percent),
+        surgery_totals,
+        lambda r: (r.surgery_expense, r.doctor_percent),
+    ),
+    (
+        (Room, Room.amount, Room.doctor_percent),
+        room_totals,
+        lambda r: (r.doctor_percent,),
+    ),
+)
 
 def _resolve_create_datetime(value: datetime | None) -> datetime:
     return value if value is not None else datetime.now(CLINIC_TZ)
@@ -44,19 +66,17 @@ async def _sum_doctor_share(
     total = ZERO
     start, end = get_business_datetime_range(date_from, date_to)
 
-    for model, totals_fn, extra_args in (
-        (Consultation, consultation_totals, lambda r: (r.minus_beshming, r.doctor_percent)),
-        (Surgery, surgery_totals, lambda r: (r.surgery_expense, r.doctor_percent)),
-        (Room, room_totals, lambda r: (r.doctor_percent,)),
-    ):
-        stmt = select(model).where(model.is_voided.is_(False), model.doctor_id == staff_id)
+    for columns, totals_fn, extra_args in _DOCTOR_SHARE_SOURCES:
+        model = columns[0]
+        stmt = select(*columns[1:]).where(
+            model.is_voided.is_(False), model.doctor_id == staff_id
+        )
         if start:
             stmt = stmt.where(model.date >= start)
         if end:
             stmt = stmt.where(model.date < end)
 
-        records = (await db.execute(stmt)).scalars().all()
-        for record in records:
+        for record in (await db.execute(stmt)).all():
             totals = totals_fn(record.amount, *extra_args(record))
             total += totals["doctor_share"]
 
@@ -80,6 +100,44 @@ async def _sum_duty_entries(
 
     return (await db.execute(stmt)).scalar_one()
 
+def _prorated_fixed_salary(
+    staff: Staff, *, date_from: date | None, date_to: date | None
+) -> Decimal:
+    """Fixed-salary base for one nurse/other staff member over a range.
+
+    Nobody accrues salary before they were hired. Without this clamp a
+    query for any month preceding the hire date returned a *full*
+    month's pay — e.g. someone hired 2026-09-17 showed the whole
+    fixed_salary as owed for August. Clamping the lower bound also
+    prorates the hire month itself, so a mid-month hire is paid only
+    for the days actually worked.
+
+    Deliberately keyed on hire_date alone, with NO created_at fallback:
+    created_at is when the record was typed into the CRM, which says
+    nothing about when the person started working. Falling back to it
+    would quietly *reduce* the pay owed to long-standing staff whose
+    records were entered recently. Staff with no hire_date therefore
+    keep the un-clamped behaviour until one is filled in.
+    (build_staff_lifetime_summary does use the created_at fallback, but
+    only as an explicitly documented approximation for a figure nobody
+    pays out from.)
+
+    Shared by compute_earned_amount and build_staff_balance so the two can
+    never disagree about what someone is owed.
+    """
+    if date_from is None or date_to is None:
+        raise ValueError("date_from and date_to are required to prorate a fixed salary")
+
+    if staff.hire_date is not None and staff.hire_date > date_from:
+        effective_from = staff.hire_date
+    else:
+        effective_from = date_from
+
+    if effective_from > date_to:
+        return ZERO
+
+    return prorate_fixed_salary(staff.fixed_salary or ZERO, effective_from, date_to)
+
 async def compute_earned_amount(
     db: AsyncSession,
     *,
@@ -90,34 +148,7 @@ async def compute_earned_amount(
     if staff.role == StaffRoleEnum.DOCTOR:
         base = await _sum_doctor_share(db, staff_id=staff.id, date_from=date_from, date_to=date_to)
     else:
-        if date_from is None or date_to is None:
-            raise ValueError("date_from and date_to are required to prorate a fixed salary")
-
-        # Nobody accrues salary before they were hired. Without this clamp a
-        # query for any month preceding the hire date returned a *full*
-        # month's pay — e.g. someone hired 2026-09-17 showed the whole
-        # fixed_salary as owed for August. Clamping the lower bound also
-        # prorates the hire month itself, so a mid-month hire is paid only
-        # for the days actually worked.
-        #
-        # Deliberately keyed on hire_date alone, with NO created_at fallback:
-        # created_at is when the record was typed into the CRM, which says
-        # nothing about when the person started working. Falling back to it
-        # would quietly *reduce* the pay owed to long-standing staff whose
-        # records were entered recently. Staff with no hire_date therefore
-        # keep the un-clamped behaviour until one is filled in.
-        # (build_staff_lifetime_summary does use the created_at fallback, but
-        # only as an explicitly documented approximation for a figure nobody
-        # pays out from.)
-        if staff.hire_date is not None and staff.hire_date > date_from:
-            effective_from = staff.hire_date
-        else:
-            effective_from = date_from
-
-        if effective_from > date_to:
-            base = ZERO
-        else:
-            base = prorate_fixed_salary(staff.fixed_salary or ZERO, effective_from, date_to)
+        base = _prorated_fixed_salary(staff, date_from=date_from, date_to=date_to)
 
     duty_sum = await _sum_duty_entries(db, staff_id=staff.id, date_from=date_from, date_to=date_to)
 
@@ -214,6 +245,7 @@ async def update_salary_payment(
     salary_payment: SalaryPayment,
     data: SalaryPaymentUpdate,
 ) -> SalaryPayment:
+    forbid_edit_if_voided(salary_payment)
     changes = data.model_dump(exclude_unset=True)
 
     if "staff_id" in changes and changes["staff_id"] is not None:
@@ -250,6 +282,108 @@ async def void_salary_payment(
     await db.refresh(salary_payment)
     return salary_payment
 
+async def _sum_doctor_share_by_staff(
+    db: AsyncSession,
+    *,
+    staff_ids: list[int],
+    date_from: date | None,
+    date_to: date | None,
+) -> dict[int, Decimal]:
+    """_sum_doctor_share for many doctors at once: 3 queries, not 3 per doctor.
+
+    Identical arithmetic to _sum_doctor_share — the same totals_fn is applied
+    to the same per-record values and the same per-record doctor_share is
+    summed. Only the grouping moves from "one query per doctor" to "one query
+    per table, bucketed in Python", so the figures cannot drift. Rounding is
+    still per record before aggregation, which is this project's rule.
+    """
+    totals: dict[int, Decimal] = {staff_id: ZERO for staff_id in staff_ids}
+    if not staff_ids:
+        return totals
+
+    start, end = get_business_datetime_range(date_from, date_to)
+
+    for columns, totals_fn, extra_args in _DOCTOR_SHARE_SOURCES:
+        model = columns[0]
+        stmt = select(model.doctor_id, *columns[1:]).where(
+            model.is_voided.is_(False), model.doctor_id.in_(staff_ids)
+        )
+        if start:
+            stmt = stmt.where(model.date >= start)
+        if end:
+            stmt = stmt.where(model.date < end)
+
+        for record in (await db.execute(stmt)).all():
+            record_totals = totals_fn(record.amount, *extra_args(record))
+            totals[record.doctor_id] += record_totals["doctor_share"]
+
+    return totals
+
+async def _sum_duty_entries_by_staff(
+    db: AsyncSession,
+    *,
+    staff_ids: list[int],
+    date_from: date | None,
+    date_to: date | None,
+) -> dict[int, Decimal]:
+    """_sum_duty_entries for many staff at once, as one GROUP BY."""
+    totals: dict[int, Decimal] = {staff_id: ZERO for staff_id in staff_ids}
+    if not staff_ids:
+        return totals
+
+    stmt = (
+        select(DutyEntry.staff_id, func.coalesce(func.sum(DutyEntry.amount), ZERO))
+        .where(
+            DutyEntry.staff_id.in_(staff_ids),
+            DutyEntry.is_voided.is_(False),
+        )
+        .group_by(DutyEntry.staff_id)
+    )
+    if date_from is not None:
+        stmt = stmt.where(DutyEntry.date >= date_from)
+    if date_to is not None:
+        stmt = stmt.where(DutyEntry.date <= date_to)
+
+    for entry_staff_id, total in (await db.execute(stmt)).all():
+        totals[entry_staff_id] = total
+
+    return totals
+
+async def _sum_paid_by_staff(
+    db: AsyncSession,
+    *,
+    staff_ids: list[int],
+    date_from: date,
+    date_to: date,
+) -> dict[int, Decimal]:
+    """compute_paid_amount for many staff at once, as one GROUP BY.
+
+    Same period-overlap predicate, so a payment still counts in full on any
+    overlap rather than being prorated.
+    """
+    totals: dict[int, Decimal] = {staff_id: ZERO for staff_id in staff_ids}
+    if not staff_ids:
+        return totals
+
+    stmt = (
+        select(
+            SalaryPayment.staff_id,
+            func.coalesce(func.sum(SalaryPayment.amount), ZERO),
+        )
+        .where(
+            SalaryPayment.staff_id.in_(staff_ids),
+            SalaryPayment.is_voided.is_(False),
+            SalaryPayment.period_start <= date_to,
+            SalaryPayment.period_end >= date_from,
+        )
+        .group_by(SalaryPayment.staff_id)
+    )
+
+    for payment_staff_id, total in (await db.execute(stmt)).all():
+        totals[payment_staff_id] = total
+
+    return totals
+
 async def build_staff_balance(
     db: AsyncSession,
     *,
@@ -270,11 +404,34 @@ async def build_staff_balance(
     stmt = stmt.order_by(Staff.last_name.asc(), Staff.first_name.asc(), Staff.id.asc())
 
     staff_list = (await db.execute(stmt)).scalars().all()
+    staff_ids = [staff.id for staff in staff_list]
+
+    # Five queries total, whatever the headcount. This used to issue five
+    # *per active staff member* (three record scans plus a duty sum inside
+    # compute_earned_amount, plus compute_paid_amount), so the Oyliklar page
+    # cost 5N round trips.
+    doctor_ids = [
+        staff.id for staff in staff_list if staff.role == StaffRoleEnum.DOCTOR
+    ]
+    doctor_shares = await _sum_doctor_share_by_staff(
+        db, staff_ids=doctor_ids, date_from=date_from, date_to=date_to
+    )
+    duty_sums = await _sum_duty_entries_by_staff(
+        db, staff_ids=staff_ids, date_from=date_from, date_to=date_to
+    )
+    paid_sums = await _sum_paid_by_staff(
+        db, staff_ids=staff_ids, date_from=date_from, date_to=date_to
+    )
 
     summaries: list[StaffEarnedPaidSummary] = []
     for staff in staff_list:
-        earned = await compute_earned_amount(db, staff=staff, date_from=date_from, date_to=date_to)
-        paid = await compute_paid_amount(db, staff_id=staff.id, date_from=date_from, date_to=date_to)
+        if staff.role == StaffRoleEnum.DOCTOR:
+            base = doctor_shares[staff.id]
+        else:
+            base = _prorated_fixed_salary(staff, date_from=date_from, date_to=date_to)
+
+        earned = money(base + duty_sums[staff.id])
+        paid = paid_sums[staff.id]
 
         summaries.append(
             StaffEarnedPaidSummary(

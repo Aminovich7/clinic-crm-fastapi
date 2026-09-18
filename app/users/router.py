@@ -60,7 +60,15 @@ async def login(
 
 
 @router.post("/auth/refresh", response_model=TokenPair)
-async def refresh_token(body: RefreshRequest, db: AsyncSession = Depends(get_db)):
+# Looser than /auth/login (a normal page load legitimately refreshes once,
+# and a user may have several tabs open) but not unbounded: without any limit
+# this endpoint was a free oracle for testing stolen or guessed tokens.
+@limiter.limit("30/minute")
+async def refresh_token(
+    request: Request,
+    body: RefreshRequest,
+    db: AsyncSession = Depends(get_db),
+):
     try:
         payload = decode_token(
             body.refresh_token,
@@ -72,12 +80,21 @@ async def refresh_token(body: RefreshRequest, db: AsyncSession = Depends(get_db)
             status.HTTP_401_UNAUTHORIZED, "Invalid or expired refresh token"
         )
 
+    # Same guard as get_current_user: a non-UUID `sub` is an unusable token,
+    # which is a 401, not a 500 from ValueError.
+    try:
+        user_uuid = uuid.UUID(str(payload.get("sub")))
+    except (ValueError, AttributeError, TypeError):
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED, "Invalid or expired refresh token"
+        )
+
     if await is_token_blocklisted(payload["jti"]):
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED, "Refresh token has been revoked"
         )
 
-    user = await db.get(User, uuid.UUID(payload["sub"]))
+    user = await db.get(User, user_uuid)
 
     if (
         user is None

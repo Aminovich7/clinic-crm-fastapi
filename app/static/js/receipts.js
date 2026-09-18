@@ -387,25 +387,26 @@
 
   // Both mirror app/finance/calculations.py exactly (never persisted
   // server-side, so they have to be recomputed here the same way the
-  // create-form preview does it).
+  // create-form preview does it). All BigInt via the helpers in nav.js —
+  // float arithmetic here could round a half-way value the opposite way to
+  // the server's Decimal and show a figure 1 so'm off the report's.
+  function recordExpense(kind, record) {
+    if (kind === "room") return 0n;
+    return toScaledBigInt(
+      kind === "consultation" ? record.minus_beshming ?? 0 : record.surgery_expense,
+      0
+    );
+  }
+
   function computeDoctorShare(kind, record) {
-    const amount = Number(record.amount);
-    const percent = Number(record.doctor_percent);
-    if (kind === "room") {
-      return Math.round((amount * percent) / 100);
-    }
-    const expense = Number(kind === "consultation" ? record.minus_beshming ?? 0 : record.surgery_expense);
-    return Math.round(((amount - expense) * percent) / 100);
+    const amount = toScaledBigInt(record.amount, 0);
+    const base = amount - recordExpense(kind, record);
+    return percentageOf(base, record.doctor_percent);
   }
 
   function computeClinicProfit(kind, record) {
-    const amount = Number(record.amount);
-    const doctorShare = computeDoctorShare(kind, record);
-    if (kind === "room") {
-      return amount - doctorShare;
-    }
-    const expense = Number(kind === "consultation" ? record.minus_beshming ?? 0 : record.surgery_expense);
-    return amount - doctorShare - expense;
+    const amount = toScaledBigInt(record.amount, 0);
+    return amount - computeDoctorShare(kind, record) - recordExpense(kind, record);
   }
 
   async function voidRecord(kind, id) {

@@ -5,6 +5,7 @@ from decimal import Decimal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.common.types import Money
+from app.common.validators import reject_explicit_null
 
 
 class PharmacyEntryCreate(BaseModel):
@@ -26,6 +27,9 @@ class PharmacyEntryUpdate(BaseModel):
     medicine_cost: Decimal | None = Field(default=None, ge=0)
     amount_paid: Decimal | None = Field(default=None, ge=0)
     comment: str | None = Field(default=None, max_length=500)
+    # medicine_cost, amount_paid and comment are all nullable; the
+    # "at least one of the two amounts" rule is enforced in the service.
+    _no_nulls = reject_explicit_null("date")
 
 
 class PharmacyEntryRead(BaseModel):

@@ -84,7 +84,17 @@ async def build_consultation_report(
     date_to: date | None,
     actor: User,
 ) -> ConsultationReport:
-    stmt = select(Consultation).where(Consultation.is_voided.is_(False))
+    # Only the columns the totals actually need. Selecting whole entities
+    # made SQLAlchemy build a full ORM instance, with identity-map bookkeeping,
+    # for every row in an unbounded scan; these reports read the entire
+    # matching set by design, so that overhead scaled with the table.
+    stmt = select(
+        Consultation.amount,
+        Consultation.minus_beshming,
+        Consultation.doctor_percent,
+        Consultation.type,
+        Consultation.doctor_id,
+    ).where(Consultation.is_voided.is_(False))
 
     if actor.role == UserRoleEnum.ASSISTANT:
         stmt = stmt.where(Consultation.created_by_id == actor.id)
@@ -95,7 +105,7 @@ async def build_consultation_report(
     if end:
         stmt = stmt.where(Consultation.date < end)
 
-    records = (await db.execute(stmt)).scalars().all()
+    records = (await db.execute(stmt)).all()
 
     korik_total = ZERO
     korik_count = 0
@@ -155,7 +165,12 @@ async def build_surgery_report(
     date_to: date | None,
     actor: User,
 ) -> SurgeryReport:
-    stmt = select(Surgery).where(Surgery.is_voided.is_(False))
+    stmt = select(
+        Surgery.amount,
+        Surgery.surgery_expense,
+        Surgery.doctor_percent,
+        Surgery.doctor_id,
+    ).where(Surgery.is_voided.is_(False))
 
     if actor.role == UserRoleEnum.ASSISTANT:
         stmt = stmt.where(Surgery.created_by_id == actor.id)
@@ -166,7 +181,7 @@ async def build_surgery_report(
     if end:
         stmt = stmt.where(Surgery.date < end)
 
-    records = (await db.execute(stmt)).scalars().all()
+    records = (await db.execute(stmt)).all()
 
     total_income = ZERO
     total_doctor_share = ZERO
@@ -212,7 +227,11 @@ async def build_room_report(
     date_to: date | None,
     actor: User,
 ) -> RoomReport:
-    stmt = select(Room).where(Room.is_voided.is_(False))
+    stmt = select(
+        Room.amount,
+        Room.doctor_percent,
+        Room.doctor_id,
+    ).where(Room.is_voided.is_(False))
 
     if actor.role == UserRoleEnum.ASSISTANT:
         stmt = stmt.where(Room.created_by_id == actor.id)
@@ -223,7 +242,7 @@ async def build_room_report(
     if end:
         stmt = stmt.where(Room.date < end)
 
-    records = (await db.execute(stmt)).scalars().all()
+    records = (await db.execute(stmt)).all()
 
     total_income = ZERO
     total_doctor_share = ZERO

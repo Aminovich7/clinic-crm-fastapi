@@ -4,7 +4,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.pagination import PaginatedResponse
-from app.common.voidable import hard_delete_voided_record, restore_voided_record
+from app.common.voidable import (
+    hard_delete_voided_record,
+    hide_if_voided,
+    restore_voided_record,
+)
 from app.db.session import get_db
 from app.duty.schemas import DutyEntryCreate, DutyEntryRead, DutyEntryUpdate
 from app.duty.service import (
@@ -63,7 +67,8 @@ async def get_duty_entry_endpoint(
     _: User = Depends(require_roles(*MANAGE_ROLES)),
     db: AsyncSession = Depends(get_db),
 ):
-    return await get_duty_entry_or_404(db, duty_entry_id)
+    record = await get_duty_entry_or_404(db, duty_entry_id)
+    return hide_if_voided(record, "Duty entry not found")
 
 
 @router.patch("/{duty_entry_id}", response_model=DutyEntryRead)
@@ -98,8 +103,6 @@ async def restore_duty_entry_endpoint(
         db,
         actor=actor,
         obj=record,
-        action="restore_duty_entry",
-        resource_type="duty_entry",
     )
 
 
@@ -111,13 +114,14 @@ async def delete_duty_entry_endpoint(
 ):
     """Permanently delete an already-voided record (superadmin only).
 
-    The full row is written into the audit log before it is destroyed.
+    Irreversible: nothing of the record is kept anywhere, by design. The
+    record must already be voided, which holds by construction because Audit
+    Jurnali is the only page offering this action and it lists only voided
+    records.
     """
     record = await get_duty_entry_or_404(db, duty_entry_id)
     await hard_delete_voided_record(
         db,
         actor=actor,
         obj=record,
-        action="delete_duty_entry",
-        resource_type="duty_entry",
     )

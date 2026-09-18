@@ -6,6 +6,7 @@ from decimal import Decimal
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.common.types import Money
+from app.common.validators import reject_explicit_null
 
 
 class DutyEntryCreate(BaseModel):
@@ -19,6 +20,7 @@ class DutyEntryUpdate(BaseModel):
     staff_id: int | None = None
     date: date_ | None = None
     amount: Decimal | None = Field(default=None, ge=0)
+    _no_nulls = reject_explicit_null("date", "amount")
 
 
 class DutyEntryRead(BaseModel):

@@ -61,8 +61,6 @@ class TestRestore:
             seeded_db,
             actor=actor,
             obj=record,
-            action="restore_consultation",
-            resource_type="consultation",
         )
 
         assert restored.is_voided is False
@@ -82,7 +80,6 @@ class TestRestore:
 
         await restore_voided_record(
             seeded_db, actor=actor, obj=record,
-            action="restore_consultation", resource_type="consultation",
         )
 
         items, _ = await list_consultations(
@@ -99,7 +96,6 @@ class TestRestore:
 
         restored = await restore_voided_record(
             seeded_db, actor=actor, obj=record,
-            action="restore_consultation", resource_type="consultation",
         )
 
         assert restored.receipt_number == 7001
@@ -114,7 +110,6 @@ class TestRestore:
         with pytest.raises(HTTPException) as exc:
             await restore_voided_record(
                 seeded_db, actor=actor, obj=record,
-                action="restore_consultation", resource_type="consultation",
             )
         assert exc.value.status_code == 409
 
@@ -129,7 +124,6 @@ class TestHardDelete:
         with pytest.raises(HTTPException) as exc:
             await hard_delete_voided_record(
                 seeded_db, actor=actor, obj=record,
-                action="delete_consultation", resource_type="consultation",
             )
         assert exc.value.status_code == 409
 
@@ -143,7 +137,6 @@ class TestHardDelete:
 
         await hard_delete_voided_record(
             seeded_db, actor=actor, obj=record,
-            action="delete_consultation", resource_type="consultation",
         )
 
         assert await seeded_db.get(Consultation, record_id) is None
@@ -160,7 +153,6 @@ class TestHardDelete:
         await void_consultation(seeded_db, actor=actor, consultation=record)
         await hard_delete_voided_record(
             seeded_db, actor=actor, obj=record,
-            action="delete_consultation", resource_type="consultation",
         )
 
         assert await seeded_db.get(Consultation, record_id) is None
@@ -183,7 +175,6 @@ class TestSharedAcrossResources:
         await void_expense(seeded_db, actor=actor, expense=expense)
         await restore_voided_record(
             seeded_db, actor=actor, obj=expense,
-            action="restore_expense", resource_type="expense",
         )
         assert expense.is_voided is False
 
@@ -195,7 +186,6 @@ class TestSharedAcrossResources:
         await void_expense(seeded_db, actor=actor, expense=expense)
         await hard_delete_voided_record(
             seeded_db, actor=actor, obj=expense,
-            action="delete_expense", resource_type="expense",
         )
 
         assert await seeded_db.get(Expense, expense_id) is None
@@ -247,7 +237,6 @@ class TestVoidedRecordsFeed:
         await void_consultation(seeded_db, actor=actor, consultation=record)
         await restore_voided_record(
             seeded_db, actor=actor, obj=record,
-            action="restore_consultation", resource_type="consultation",
         )
 
         items, _ = await list_voided_records(seeded_db, page=1, page_size=50)

@@ -16,10 +16,11 @@
   let activeReport = "total";
   let chart = null;
 
-  const today = new Date();
-  const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-  dateToInput.value = today.toISOString().slice(0, 10);
-  dateFromInput.value = firstOfMonth.toISOString().slice(0, 10);
+  // Local calendar arithmetic via monthToDateRange() (nav.js) — see the note
+  // on toDateInputValue() for why toISOString() must not be used here.
+  const defaultRange = monthToDateRange();
+  dateFromInput.value = defaultRange.from;
+  dateToInput.value = defaultRange.to;
 
   async function loadDoctorSelectOptions() {
     try {

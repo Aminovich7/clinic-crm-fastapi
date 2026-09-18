@@ -1,4 +1,11 @@
 __pycache__/
 *.pyc
-.env
 pgdata/
+.pytest_cache/
+
+# Every local env file, including backups like .env.pre-rotation.bak.
+# Previously only the literal ".env" was ignored, so a file named .env.bak or
+# .env.local would have been committed without anyone noticing.
+.env
+.env.*
+!.env.example

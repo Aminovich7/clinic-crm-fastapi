@@ -5,6 +5,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.common.voidable import forbid_edit_if_voided
 from app.duty.models import DutyEntry
 from app.duty.schemas import DutyEntryCreate, DutyEntryUpdate
 from app.staff.service import get_staff_or_404
@@ -82,6 +83,7 @@ async def update_duty_entry(
     duty_entry: DutyEntry,
     data: DutyEntryUpdate,
 ) -> DutyEntry:
+    forbid_edit_if_voided(duty_entry)
     changes = data.model_dump(exclude_unset=True)
 
     if "staff_id" in changes and changes["staff_id"] is not None:

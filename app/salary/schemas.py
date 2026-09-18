@@ -5,6 +5,7 @@ from decimal import Decimal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.common.types import Money
+from app.common.validators import reject_explicit_null
 from app.salary.models import SalaryPaymentType
 from app.staff.models import StaffRoleEnum
 
@@ -32,6 +33,9 @@ class SalaryPaymentUpdate(BaseModel):
     period_end: date | None = None
     payment_type: SalaryPaymentType | None = None
     amount: Decimal | None = Field(default=None, ge=0)
+    _no_nulls = reject_explicit_null(
+        "paid_at", "period_start", "period_end", "payment_type", "amount"
+    )
 
 
 class SalaryPaymentRead(BaseModel):

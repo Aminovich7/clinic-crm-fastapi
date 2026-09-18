@@ -38,9 +38,9 @@
 </div>
 
 <div class="card">
-  <div style="display:flex; justify-content:space-between; align-items:center;">
-    <div class="grid" id="report-summary" style="flex:1"></div>
-    <button type="button" class="secondary" id="export-btn" style="margin-left:16px;">Excelga yuklab olish</button>
+  <div class="summary-bar">
+    <div class="grid summary-bar-grid" id="report-summary"></div>
+    <button type="button" class="secondary summary-bar-action" id="export-btn">Excelga yuklab olish</button>
   </div>
 </div>
 
@@ -58,6 +58,11 @@
 </div>
 {% endblock %}
 {% block scripts %}
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.5.1/chart.umd.min.js"></script>
+{# Chart.js is served from /static rather than cdnjs. Two reasons: the
+   Content-Security-Policy in app/main.py is script-src 'self' with no
+   third-party origins, and a clinic whose internet is down should still be
+   able to open Hisobotlar. Vendored copy is v4.5.1, the exact build this
+   page used to fetch; to upgrade, replace the file and bump the comment. #}
+<script src="/static/js/vendor/chart.umd.min.js?v={{ asset_version }}"></script>
 <script src="/static/js/reports.js?v={{ asset_version }}"></script>
 {% endblock %}

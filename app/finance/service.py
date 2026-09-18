@@ -6,6 +6,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.common.voidable import forbid_edit_if_voided
 from app.finance.models import Consultation, ConsultationType, Room, Surgery, SystemSetting
 from app.finance.reports import get_business_datetime_range
 from app.finance.schemas import (
@@ -52,13 +53,6 @@ def _apply_assistant_ownership(stmt, model, actor: User):
     if actor.role == UserRoleEnum.ASSISTANT:
         stmt = stmt.where(model.created_by_id == actor.id)
     return stmt
-
-def _forbid_if_not_owner_or_privileged(record, actor: User) -> None:
-    if actor.role == UserRoleEnum.ASSISTANT and record.created_by_id != actor.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You do not have permission to view this record",
-        )
 
 # ---------------------------------------------------------------------------
 # Finance settings (dynamic minus_beshming default)
@@ -176,6 +170,7 @@ async def list_consultations(
 async def update_consultation(
     db: AsyncSession, *, actor: User, consultation: Consultation, data: ConsultationUpdate
 ) -> Consultation:
+    forbid_edit_if_voided(consultation)
     changes = data.model_dump(exclude_unset=True)
 
     if "doctor_id" in changes:
@@ -276,6 +271,7 @@ async def list_surgeries(
 async def update_surgery(
     db: AsyncSession, *, actor: User, surgery: Surgery, data: SurgeryUpdate
 ) -> Surgery:
+    forbid_edit_if_voided(surgery)
     changes = data.model_dump(exclude_unset=True)
 
     if "doctor_id" in changes:
@@ -370,6 +366,7 @@ async def list_rooms(
     return list(result.scalars().all()), total
 
 async def update_room(db: AsyncSession, *, actor: User, room: Room, data: RoomUpdate) -> Room:
+    forbid_edit_if_voided(room)
     changes = data.model_dump(exclude_unset=True)
 
     if "doctor_id" in changes:

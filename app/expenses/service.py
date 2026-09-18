@@ -6,6 +6,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.common.voidable import forbid_edit_if_voided
 from app.expenses.models import Expense
 from app.expenses.schemas import ExpenseCreate, ExpenseSummary, ExpenseUpdate
 from app.finance.calculations import money
@@ -93,6 +94,7 @@ async def sum_expenses(
 async def update_expense(
     db: AsyncSession, *, actor: User, expense: Expense, data: ExpenseUpdate
 ) -> Expense:
+    forbid_edit_if_voided(expense)
     changes = data.model_dump(exclude_unset=True)
 
     for field, value in changes.items():

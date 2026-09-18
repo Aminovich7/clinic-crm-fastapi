@@ -50,8 +50,12 @@ class RefreshRequest(BaseModel):
 
 
 class SuperAdminCredentialsUpdate(BaseModel):
-    superadmin_username: str | None
-    superadmin_password: str | None
+    # Same floor as every other account. This is the highest-privilege login
+    # in the system and was previously the only one with no length rule at
+    # all, so a one-character superadmin password was accepted. Both fields
+    # default to None so a caller can change one without sending the other.
+    superadmin_username: str | None = Field(default=None, min_length=3, max_length=64)
+    superadmin_password: str | None = Field(default=None, min_length=8)
 
 
 

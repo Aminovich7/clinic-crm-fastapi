@@ -1,4 +1,18 @@
+# Secrets must never enter the build context — COPY . . would otherwise bake
+# .env into an image layer, where it survives even if a later layer deletes it.
+.env
+.env.*
+!.env.example
+
 __pycache__/
 *.pyc
-.env
 pgdata/
+
+# Build-context hygiene: none of this is needed at runtime, and .git in
+# particular can carry the whole history into the image.
+.git/
+.gitignore
+.pytest_cache/
+.vscode/
+.devcontainer/
+.claude/

@@ -6,6 +6,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.common.voidable import forbid_edit_if_voided
 from app.finance.calculations import money
 from app.finance.reports import get_business_datetime_range
 from app.pharmacy.models import PharmacyEntry
@@ -79,6 +80,7 @@ async def update_pharmacy_entry(
     pharmacy_entry: PharmacyEntry,
     data: PharmacyEntryUpdate,
 ) -> PharmacyEntry:
+    forbid_edit_if_voided(pharmacy_entry)
     changes = data.model_dump(exclude_unset=True)
 
     new_cost = changes.get("medicine_cost", pharmacy_entry.medicine_cost)

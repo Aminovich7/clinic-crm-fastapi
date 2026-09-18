@@ -1,19 +1,28 @@
-fastapi
-uvicorn[standard]
-sqlalchemy[asyncio]>=2.0
-asyncpg
-alembic
-python-dotenv
-pydantic-settings
-pyjwt
-pwdlib[argon2]
-redis>=4.2
-python-multipart
-psycopg2-binary
-openpyxl
-slowapi
-jinja2
-pytest
-pytest-asyncio
-httpx
+# Pinned to the exact versions currently running in the clinic-crm container
+# (docker compose exec web pip freeze). Nothing was pinned before, so two
+# builds a month apart could install different majors of FastAPI, SQLAlchemy
+# or pydantic and behave differently with no change in this repository — and
+# an unpinned dependency is also the easiest supply-chain foothold there is.
+#
+# To upgrade deliberately: bump a line, rebuild, run the test suite.
+fastapi==0.141.1
+uvicorn[standard]==0.53.0
+sqlalchemy[asyncio]==2.0.53
+asyncpg==0.31.0
+alembic==1.20.0
+python-dotenv==1.2.3
+pydantic==2.13.5
+pydantic-settings==2.15.0
+pyjwt==2.14.0
+pwdlib[argon2]==0.3.1
+redis==8.1.0
+python-multipart==0.0.32
+psycopg2-binary==2.9.13
+openpyxl==3.1.5
+slowapi==0.1.10
+jinja2==3.1.6
 
+# Test-only, kept here because the suite runs inside the same image.
+pytest==9.1.1
+pytest-asyncio==1.4.0
+httpx==0.28.1

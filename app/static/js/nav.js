@@ -288,16 +288,37 @@ const DELETE_CONFIRM =
 // Local calendar arithmetic only, with no UTC round-trip, so the range is
 // the clinic's actual month regardless of the viewer's time zone.
 
+// Formats a Date as the "YYYY-MM-DD" a <input type="date"> expects, reading
+// the *local* calendar fields.
+//
+// Never use toISOString().slice(0, 10) for this. toISOString() converts to
+// UTC first, and in Asia/Tashkent (UTC+5) local midnight is still the
+// previous day in UTC — so `new Date(y, m, 1).toISOString().slice(0, 10)`
+// yields the last day of the *previous* month, every time. That is exactly
+// what the dashboard and Hisobotlar pages were sending as date_from, which
+// quietly folded one extra day of the previous month into every "this month"
+// figure on the page.
+function toDateInputValue(d) {
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 // offsetMonths=0 is the current month, -1 the previous one.
 function firstAndLastOfMonth(offsetMonths) {
   const now = new Date();
   const first = new Date(now.getFullYear(), now.getMonth() + offsetMonths, 1);
   const last = new Date(now.getFullYear(), now.getMonth() + offsetMonths + 1, 0);
-  const toInputValue = (d) => {
-    const pad = (n) => String(n).padStart(2, "0");
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  return { from: toDateInputValue(first), to: toDateInputValue(last) };
+}
+
+// The default range both the dashboard and Hisobotlar open with: the 1st of
+// the current month through today, inclusive.
+function monthToDateRange() {
+  const now = new Date();
+  return {
+    from: toDateInputValue(new Date(now.getFullYear(), now.getMonth(), 1)),
+    to: toDateInputValue(now),
   };
-  return { from: toInputValue(first), to: toInputValue(last) };
 }
 
 // month is 1-indexed; day 0 of the "next" month rolls back to the last day
@@ -356,6 +377,53 @@ function attachMonthShortcuts({
   refreshLabel();
 
   return { apply, refreshLabel };
+}
+
+// --- Exact money arithmetic ---------------------------------------------
+// The server computes every figure with Python's Decimal and ROUND_HALF_UP
+// (app/finance/calculations.py). Doing the same sums in JS with floats and
+// Math.round drifts: 0.1 + 0.2 problems aside, a product that lands exactly
+// on .5 in decimal can land just below it in binary floating point and round
+// the other way, so a receipt's on-screen preview could disagree with the
+// report by 1 so'm. These helpers do the arithmetic in BigInt instead, which
+// is exact, and round half-up away from zero exactly as Decimal does.
+
+// Parses a decimal string ("1500", "12.50") into a BigInt scaled by 10^scale.
+// "12.5" at scale 2 -> 1250n. Digits beyond `scale` are rounded half-up, the
+// same way Postgres quantizes into Numeric(12,0)/Numeric(5,2) and the same
+// way Decimal.quantize(ROUND_HALF_UP) does server-side — so a percent typed
+// into the create form with more precision than the column holds previews
+// the value that will actually be stored.
+function toScaledBigInt(value, scale) {
+  const text = String(value ?? "0").trim();
+  const match = text.match(/^(-?)(\d*)(?:\.(\d*))?$/);
+  if (!match) return 0n;
+  const [, sign, whole, fraction = ""] = match;
+
+  const kept = (fraction + "0".repeat(scale)).slice(0, scale);
+  const dropped = fraction.slice(scale);
+
+  let result = BigInt((whole || "0") + kept);
+  if (dropped && dropped[0] >= "5") {
+    result += 1n;
+  }
+  return sign === "-" ? -result : result;
+}
+
+// Divides two BigInts, rounding half away from zero — Decimal's ROUND_HALF_UP.
+function roundHalfUpDiv(numerator, denominator) {
+  const negative = numerator < 0n;
+  const magnitude = negative ? -numerator : numerator;
+  const quotient = (magnitude * 2n + denominator) / (2n * denominator);
+  return negative ? -quotient : quotient;
+}
+
+// money((base * percent) / 100) from app/finance/calculations.py, exactly.
+// `base` is a whole-so'm amount; `percent` may carry two decimals.
+function percentageOf(base, percent) {
+  const baseUnits = toScaledBigInt(base, 0);
+  const percentBasisPoints = toScaledBigInt(percent, 2);
+  return roundHalfUpDiv(baseUnits * percentBasisPoints, 10000n);
 }
 
 function paginationLabel(data) {

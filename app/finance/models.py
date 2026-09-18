@@ -10,6 +10,7 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
@@ -41,6 +42,13 @@ class Consultation(Base, TimestampMixin, VoidableMixin):
             "minus_beshming >= 0",
             name = "ck_consultation_minusbeshming_non_negative",
         ),
+    
+        # See migration a2c9e4b70d13 for why these three shapes.
+        Index("ix_consultations_voided_date", "is_voided", "date"),
+        Index(
+            "ix_consultations_doctor_voided_date", "doctor_id", "is_voided", "date"
+        ),
+        Index("ix_consultations_created_by_id", "created_by_id"),
     )
 
 
@@ -121,6 +129,13 @@ class Surgery(Base, TimestampMixin, VoidableMixin):
             name="ck_surgeries_expense_non_negative",
         ),
 
+    
+        # See migration a2c9e4b70d13 for why these three shapes.
+        Index("ix_surgeries_voided_date", "is_voided", "date"),
+        Index(
+            "ix_surgeries_doctor_voided_date", "doctor_id", "is_voided", "date"
+        ),
+        Index("ix_surgeries_created_by_id", "created_by_id"),
     )
 
     id: Mapped[int] = mapped_column(
@@ -183,6 +198,13 @@ class Room(Base, TimestampMixin, VoidableMixin):
             "doctor_percent >= 0 AND doctor_percent <= 100",
             name="ck_rooms_doctor_percent_range",
         ),
+    
+        # See migration a2c9e4b70d13 for why these three shapes.
+        Index("ix_rooms_voided_date", "is_voided", "date"),
+        Index(
+            "ix_rooms_doctor_voided_date", "doctor_id", "is_voided", "date"
+        ),
+        Index("ix_rooms_created_by_id", "created_by_id"),
     )
 
     id: Mapped[int] = mapped_column(

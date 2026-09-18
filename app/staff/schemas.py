@@ -4,6 +4,7 @@ from decimal import Decimal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.common.types import Money
+from app.common.validators import reject_explicit_null
 from app.staff.models import StaffRoleEnum, StaffStatusEnum
 
 
@@ -32,6 +33,9 @@ class StaffUpdate(BaseModel):
     specialty: str | None = Field(default=None, max_length=50)
     fixed_salary: Decimal | None = Field(default=None, ge=0)
     hire_date: date | None = None
+    # specialty, fixed_salary and hire_date are nullable by design — a
+    # doctor has no fixed_salary, a nurse has no specialty.
+    _no_nulls = reject_explicit_null("first_name", "last_name", "role")
 
 
 class StaffRead(BaseModel):

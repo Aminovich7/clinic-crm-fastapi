@@ -4,7 +4,6 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.redis import set_cached_token_version
 from app.core.security import (
     create_access_token,
     create_refresh_token,
@@ -45,6 +44,27 @@ def issue_token_pair(user: User) -> tuple[str, str]:
     )
     return access, refresh
 
+async def _require_username_available(
+    db: AsyncSession, username: str, *, exclude_user_id: uuid.UUID | None = None
+) -> None:
+    """409 if `username` is taken by anyone other than `exclude_user_id`.
+
+    users.username carries a unique index, so without this check a rename
+    onto an existing name surfaced as an IntegrityError from the commit —
+    a 500 where the honest answer is 409. Creation passes no
+    exclude_user_id; an update excludes the row being renamed so that
+    re-submitting an unchanged username is not a conflict with itself.
+    """
+    stmt = select(User).where(User.username == username)
+    if exclude_user_id is not None:
+        stmt = stmt.where(User.id != exclude_user_id)
+
+    if (await db.execute(stmt)).scalar_one_or_none() is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Username already taken",
+        )
+
 async def _create_user(
     db: AsyncSession,
     *,
@@ -54,16 +74,7 @@ async def _create_user(
     password: str,
     role: UserRoleEnum,
 ) -> User:
-    existing = await db.execute(
-        select(User).where(
-            User.username == username,
-        )
-    )
-    if existing.scalar_one_or_none() is not None:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            "Username already taken",
-        )
+    await _require_username_available(db, username)
 
     user = User(
         username=username,
@@ -123,6 +134,42 @@ async def create_assistant(
         role=UserRoleEnum.ASSISTANT,
     )
 
+async def _update_credentials(
+    db: AsyncSession,
+    *,
+    target: User,
+    username: str | None,
+    full_name: str | None,
+    password: str | None,
+) -> User:
+    """Apply a credential change and bump token_version if anything changed.
+
+    Bumping token_version is what invalidates the user's existing sessions.
+    It is now a single database write, committed atomically with the
+    credential change itself: there is no second copy in Redis that a crash
+    between the two writes could leave disagreeing with it. See the note in
+    app/core/redis.py.
+    """
+    changed = False
+
+    if username and username != target.username:
+        await _require_username_available(db, username, exclude_user_id=target.id)
+        target.username = username
+        changed = True
+    if full_name and full_name != target.full_name:
+        target.full_name = full_name
+        changed = True
+    if password:
+        target.hashed_password = hash_password(password)
+        changed = True
+
+    if changed:
+        target.token_version += 1
+
+    await db.commit()
+    await db.refresh(target)
+    return target
+
 async def update_assistant_credentials(
     db: AsyncSession,
     *,
@@ -130,24 +177,13 @@ async def update_assistant_credentials(
     assistant: User,
     data: AssistantCredentialsUpdate,
 ) -> User:
-    changed_fields = []
-    if data.username:
-        assistant.username = data.username
-        changed_fields.append("username")
-    if data.full_name:
-        assistant.full_name = data.full_name
-        changed_fields.append("full_name")
-    if data.password:
-        assistant.hashed_password = hash_password(data.password)
-        changed_fields.append("password")
-
-    if changed_fields:
-        assistant.token_version += 1
-        await set_cached_token_version(str(assistant.id), assistant.token_version)
-
-    await db.commit()
-    await db.refresh(assistant)
-    return assistant
+    return await _update_credentials(
+        db,
+        target=assistant,
+        username=data.username,
+        full_name=data.full_name,
+        password=data.password,
+    )
 
 async def update_manager_credentials(
     db: AsyncSession,
@@ -156,24 +192,13 @@ async def update_manager_credentials(
     assistant: User,
     data: ManagerCredentialsUpdate,
 ) -> User:
-    changed_fields = []
-    if data.username:
-        assistant.username = data.username
-        changed_fields.append("username")
-    if data.full_name:
-        assistant.full_name = data.full_name
-        changed_fields.append("full_name")
-    if data.password:
-        assistant.hashed_password = hash_password(data.password)
-        changed_fields.append("password")
-
-    if changed_fields:
-        assistant.token_version += 1
-        await set_cached_token_version(str(assistant.id), assistant.token_version)
-
-    await db.commit()
-    await db.refresh(assistant)
-    return assistant
+    return await _update_credentials(
+        db,
+        target=assistant,
+        username=data.username,
+        full_name=data.full_name,
+        password=data.password,
+    )
 
 async def set_user_status(
     db: AsyncSession,
@@ -186,8 +211,10 @@ async def set_user_status(
         return target
 
     target.status = new_status
+    # Bumping the version drops the user's live sessions immediately; the
+    # status check in get_current_user would catch them anyway, but this also
+    # invalidates any refresh token they still hold.
     target.token_version += 1
-    await set_cached_token_version(str(target.id), target.token_version)
 
     await db.commit()
     await db.refresh(target)
@@ -198,19 +225,10 @@ async def update_superadmin_credentials(
     superadmin: User,
     data: SuperAdminCredentialsUpdate,
 ) -> User:
-
-    if data.superadmin_username:
-
-        superadmin.username = data.superadmin_username
-
-    if data.superadmin_password:
-        superadmin.hashed_password = hash_password(data.superadmin_password)
-
-    if data.superadmin_username or data.superadmin_password:
-        superadmin.token_version += 1
-        await set_cached_token_version(str(superadmin.id), superadmin.token_version)
-
-    await db.commit()
-    await db.refresh(superadmin)
-
-    return superadmin
+    return await _update_credentials(
+        db,
+        target=superadmin,
+        username=data.superadmin_username,
+        full_name=None,
+        password=data.superadmin_password,
+    )

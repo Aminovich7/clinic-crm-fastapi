@@ -705,3 +705,15 @@ tr.voided {
   }
   nav.mainnav a.active { border-left: none; background: var(--primary); }
 }
+
+
+/* Hisobotlar summary row. These three rules were inline style= attributes
+   in reports.html; they live here so the Content-Security-Policy can use a
+   strict style-src 'self' with no 'unsafe-inline' escape hatch. */
+.summary-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.summary-bar-grid { flex: 1; }
+.summary-bar-action { margin-left: 16px; }
